@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow,noai,noimageai">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Studium WS 26/27</title>
+<meta name="description" content="Lern-App für das Wintersemester 26/27: Kalender, Fristen, Vorlesungen, Karteikarten, Formeln und Lernpläne.">
+<meta name="theme-color" content="#151a2d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Studium">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="app.css?v=1792747620">
+<script>
+window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"]]},svg:{fontCache:"global"},options:{enableMenu:false},
+ startup:{typeset:false,ready:function(){MathJax.startup.defaultReady();MathJax.startup.promise.then(function(){if(window.__typesetMain)window.__typesetMain()})}}};
+</script>
+<script defer src="vendor/mathjax/tex-svg.js"></script>
+</head>
+<body><div class="bgart" aria-hidden="true"></div>
+<nav class="nav" aria-label="Hauptnavigation"><div class="in">
+  <a href="#/heute" data-v="heute"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>Heute</a>
+  <a href="#/kalender" data-v="kalender"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Kalender</a>
+  <a href="#/fristen/bald" data-v="fristen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg>Fristen<span class="badge" id="navbadge" hidden></span></a>
+  <a href="#/faecher" data-v="faecher"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg>Fächer</a>
+</div></nav>
+<main id="main"></main>
+<div id="layer" class="layer" hidden role="dialog" aria-modal="true"></div>
+<script src="data.js?v=1792747620"></script>
+<script src="taskgen.js?v=1792747620"></script>
+<script src="app.js?v=1792747620"></script>
+</body>
+</html>
