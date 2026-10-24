@@ -696,3 +696,6 @@ body h1{font-size:2rem;line-height:1.1}
 .ptag{display:inline-block;font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:1px 7px;border-radius:99px;background:var(--hi);color:#fff;vertical-align:1px}
 .btn svg{width:18px;height:18px;flex:none}
 select[data-act=grp]{flex:1;min-width:0;max-width:100%}.toggle:has(select){flex-wrap:wrap}
+
+mjx-container.mjwide{display:inline-block;max-width:100%;overflow-x:auto;overflow-y:hidden;vertical-align:middle;padding-bottom:2px}
+.lec .tt,.sec .tt{display:block;max-width:100%;overflow-x:auto}

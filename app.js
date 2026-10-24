@@ -138,7 +138,8 @@ var IC={
 function ck(id,label){var on=!!S.done[id];return '<button class="ck'+(on?' on':'')+'" data-act="done" data-id="'+esc(id)+'" aria-pressed="'+on+'" aria-label="'+esc(label||'erledigt')+'">'+IC.check+'</button>'}
 
 /* ---------- MathJax ---------- */
-function ts(el){try{if(window.MathJax&&MathJax.typesetPromise){if(MathJax.typesetClear)MathJax.typesetClear([el]);MathJax.typesetPromise([el]).catch(function(){})}}catch(e){}}
+function wideMath(el){try{(el||document).querySelectorAll('mjx-container:not([display="true"])').forEach(function(m){var p=m.parentElement;if(p&&m.getBoundingClientRect().width>p.clientWidth+1)m.classList.add('mjwide')})}catch(e){}}
+function ts(el){try{if(window.MathJax&&MathJax.typesetPromise){if(MathJax.typesetClear)MathJax.typesetClear([el]);MathJax.typesetPromise([el]).then(function(){wideMath(el)}).catch(function(){})}}catch(e){}}
 window.__typesetMain=function(){ts(main);if(!layer.hidden)ts(layer)};
 setTimeout(function(){if(!(window.MathJax&&MathJax.typesetPromise)){document.body.classList.add('nomj');toast('Formeln werden gerade nur als Text gezeigt (kein Internet?).')}},7000);
 
