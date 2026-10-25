@@ -223,7 +223,7 @@ function hideSquirrel(){
 window.addEventListener('resize',function(){clearTimeout(window.__sqt);window.__sqt=setTimeout(hideSquirrel,150)});
 document.addEventListener('click',function(e){var q=e.target.closest&&e.target.closest('.sqh');if(!q)return;e.preventDefault();
   q.classList.remove('hop');void q.offsetWidth;q.classList.add('hop');S.ui.sqn=(S.ui.sqn||0)+1;save();
-  toast('🐿️ '+SQSAY[Math.floor(Math.random()*SQSAY.length)]+' <span class="muted small">('+S.ui.sqn+'× gefunden)</span>');
+  toast('🐿️ '+SQSAY[Math.floor(Math.random()*SQSAY.length)]+' ('+S.ui.sqn+'× gefunden)');
   if(Math.random()<.5){delete SQPOS[location.hash||'#/heute'];setTimeout(hideSquirrel,700)}});
 
 
@@ -1136,7 +1136,7 @@ setInterval(function(){var n=new Date();if(n.getMinutes()!==NOW.getMinutes()){NO
 
 /* Update-Check: neue Version erkennen und Neu-laden anbieten */
 var MYVER=(function(){var sc=document.querySelector('script[src*="app.js"]');var m=sc&&sc.getAttribute('src').match(/v=(\d+)/);return m?m[1]:null})(),updShown=false;
-function checkUpdate(){if(!MYVER||updShown||!window.fetch)return;fetch('index.html?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.text()}).then(function(h){var m=h.match(/app\.js\?v=(\d+)/);
+function checkUpdate(){if(!MYVER||updShown||!window.fetch)return;fetch('index.html?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.text()}).then(function(h){var m=h.match(/boot\.js\?v=(\d+)/); /* index.html nennt nur boot.js; build.py gibt boot.js und app.js dieselbe Version */
   if(m&&m[1]!==MYVER){updShown=true;var nav=document.querySelector('.nav');var d=document.createElement('button');d.className='updpill';d.title='Neue Version: tippen zum Laden';d.setAttribute('aria-label','Neue Version laden');d.innerHTML='<span class="ud"></span>↻ Update';(nav||document.body).appendChild(d);
     d.onclick=function(){location.reload()}}}).catch(function(){})}
 /* Wenn die App aus dem Hintergrund zurückkommt und gerade nichts offen ist: still neu laden */
@@ -1153,7 +1153,8 @@ function sbFetch(path,opt,noAuth){opt=opt||{};opt.headers=Object.assign({'apikey
   return fetch(SB_URL+path,opt).then(function(r){return r.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null}catch(e){}if(!r.ok){var e=new Error((j&&(j.msg||j.message||j.error_description||j.error))||('Fehler '+r.status));e.status=r.status;throw e}return j})})}
 /* Anmeldung aus localStorage neu lesen: ein anderer Tab kann den Refresh-Token schon erneuert haben (Rotation). */
 function authReload(){try{var a=JSON.parse(localStorage.getItem(AUTHKEY)||'{}');if(a&&a.access_token)AUTH=a}catch(e){}}
-window.addEventListener('storage',function(ev){if(ev.key===AUTHKEY){authReload();if(!loggedIn()){AUTH={};rerender()}}});
+window.addEventListener('storage',function(ev){if(ev.key===AUTHKEY){var a={};try{a=JSON.parse(ev.newValue||'{}')||{}}catch(e){}
+  if(a.access_token)authReload();else if(loggedIn()){AUTH={};SY={};rerender()} /* in einem anderen Tab abgemeldet → hier sofort auch */}});
 function authDrop(msg){AUTH={};authSave();SY.err=msg||'Anmeldung abgelaufen, bitte neu anmelden';sySave();if(layer.hidden)rerender()}
 var refreshing=null;
 function authRefresh(){authReload();if(!AUTH.refresh_token)return Promise.reject(new Error('nicht angemeldet'));if(refreshing)return refreshing;
@@ -1187,8 +1188,8 @@ function setPassword(pw){return authReady().then(function(){return sbAuthed('/au
 /* Zusammenführen je Schlüssel: der neuere Zeitstempel gewinnt */
 function tsOf(T,sec,k){return (T&&T[sec]&&T[sec][k])||0}
 function mergeByTs(L,R){var out={},LT=L._ts||{},RT=R._ts||{},TS={};
-  SECTIONS.forEach(function(sec){var a=L[sec]||{},b=R[sec]||{},o={},t={};Object.keys(a).concat(Object.keys(b)).forEach(function(k){if(k in o)return;var ta=tsOf(LT,sec,k),tb=tsOf(RT,sec,k);var useB=(k in b)&&(tb>ta||(!(k in a)&&ta===0));if(useB){if(b[k]!==undefined)o[k]=b[k]}else if(a[k]!==undefined)o[k]=a[k];t[k]=Math.max(ta,tb)});out[sec]=o;TS[sec]=t});
-  var sa=LT._s||{},sb=RT._s||{},st={};SCALARS.forEach(function(k){var ta=sa[k]||0,tb=sb[k]||0;out[k]=(k in R)&&(!(k in L)||tb>ta)?R[k]:L[k];st[k]=Math.max(ta,tb)});TS._s=st;
+  SECTIONS.forEach(function(sec){var a=L[sec]||{},b=R[sec]||{},o={},t={};Object.keys(a).concat(Object.keys(b)).forEach(function(k){if(k in o)return;var ta=tsOf(LT,sec,k),tb=tsOf(RT,sec,k);var useB=tb>ta||(tb===ta&&!(k in a)&&ta===0);if(useB){if((k in b)&&b[k]!==undefined)o[k]=b[k]}else if((k in a)&&a[k]!==undefined)o[k]=a[k];t[k]=Math.max(ta,tb)});out[sec]=o;TS[sec]=t});
+  var sa=LT._s||{},sb=RT._s||{},st={};SCALARS.forEach(function(k){var ta=sa[k]||0,tb=sb[k]||0;out[k]=tb>ta||(tb===ta&&(k in R)&&!(k in L))?R[k]:L[k];st[k]=Math.max(ta,tb)});TS._s=st;
   out._ts=TS;out._v=2;out._mod=Math.max(L._mod||0,R._mod||0);return out}
 function applyRemote(R){S=R;SECTIONS.forEach(function(k){S[k]=S[k]||{}});S.xp=S.xp||0;S._ts=S._ts||{};snapInit();
   try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(S.theme)document.documentElement.setAttribute('data-theme',S.theme);if(layer.hidden)rerender()}
@@ -1210,7 +1211,7 @@ function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;D.mods.forEa
   return '<div class="lg"><div class="lg-sky" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="lg-in">'+
   '<section class="lg-hero"><div class="lg-mark">'+SQSVG+'</div><p class="lg-kick">WiIng Bau · RWTH Aachen · WS 26/27</p><h1>Dein Semester.<br><span>Ein Plan.</span></h1>'+
   '<p class="lg-sub">Vorlesungen als Lerntexte, eigene Aufgaben mit Lösungsweg, Fristen und Lernpläne – auf jedem Gerät derselbe Stand.</p>'+
-  '<p class="lg-by">Von RWTH-Studenten für RWTH-Studenten. Gerade: Wirtschaftsingenieurwesen Bau, 1. Semester – weitere Studiengänge folgen.</p>'+
+  '<p class="lg-by"><b>Von RWTH-Studenten für RWTH-Studenten.</b><span>Gerade: Wirtschaftsingenieurwesen Bau, 1. Semester – weitere Studiengänge folgen.</span></p>'+
   '<ul class="lg-stats"><li><b>'+nM+'</b><span>Fächer</span></li><li><b>'+nT+'</b><span>Aufgaben</span></li><li><b>'+nF+'</b><span>Formeln</span></li><li><b>∞</b><span>Zufallszahlen</span></li></ul></section>'+
   '<section class="lg-card" aria-label="'+(rec?'Neues Passwort setzen':'Anmelden')+'">'+
   (rec?'<h2>Neues Passwort</h2><p class="small muted">Mindestens 12 Zeichen mit Groß- und Kleinbuchstaben, Zahl und Sonderzeichen.</p>'+
