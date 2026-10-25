@@ -54,7 +54,7 @@ function tmin(t){var m=/(\d{1,2}):(\d{2})/.exec(t||'');return m?(+m[1])*60+(+m[2
 var thisMon=monday(TODAY), nextMon=addDays(thisMon,7), lastMon=addDays(thisMon,-7);
 
 /* ---------- Fächer ---------- */
-var ORDER=['mathe','stat','bsk','bure','gdm','mech','spa'];
+var ORDER=['mathe','stat','bsk','bure','gdm','mech'];
 var SHORT={mathe:'Mathe',stat:'Statistik',bsk:'Baustoffkunde',bure:'Buchführung',gdm:'Management',mech:'Mechanik',spa:'Spanisch',studium:'Studium'};
 var MODS=[],MOD={};
 ORDER.forEach(function(id){var m=(D.mods||[]).find(function(x){return x.id===id});if(m){MODS.push(m);MOD[id]=m}});
@@ -107,8 +107,9 @@ function events(){
   out.sort(function(a,b){return a.d-b.d||((a.tm||0)-(b.tm||0))});
   return EV=out;
 }
-function isDl(e){return e.kind!=='termin'}
-function isPast(e){if(e.d<TODAY)return true;if(+e.d===+TODAY&&e.tm!=null&&!/bis/.test(e.time||'')&&e.kind==='termin'){return NOW.getHours()*60+NOW.getMinutes()>e.tm+60}
+function isTermin(e){return e.kind==='termin'||e.kind==='lv'} /* lv = Einzeltermin einer Vorlesung/Übung */
+function isDl(e){return !isTermin(e)}
+function isPast(e){if(e.d<TODAY)return true;if(+e.d===+TODAY&&e.tm!=null&&!/bis/.test(e.time||'')&&isTermin(e)){return NOW.getHours()*60+NOW.getMinutes()>e.tm+60}
   if(+e.d===+TODAY&&e.tm!=null&&/bis|frist/.test((e.time||'')+e.kind)){return NOW.getHours()*60+NOW.getMinutes()>e.tm}return false}
 function missed(){return events().filter(function(e){return isDl(e)&&isPast(e)&&!S.done[e.id]})}
 function upcoming(){return events().filter(function(e){return isDl(e)&&!isPast(e)&&!S.done[e.id]})}
@@ -119,7 +120,7 @@ function nextExam(m){var a=m.exams.filter(function(x){return x.date&&pd(x.date)>
 /* ---------- Was steht an? (nächste 36 h) ---------- */
 function upcomingSlots(){var out=[],nowMin=NOW.getHours()*60+NOW.getMinutes();
   [0,1,2].forEach(function(off){var d=addDays(TODAY,off);weeklyOn(d).filter(function(w){var G=(S.ui&&S.ui.grp)||{};return !w.grpKey||G[w.grpKey]===w.grp}).forEach(function(w){var st=tmin(w.time);if(off===0&&st!=null&&st+90<nowMin)return;out.push(Object.assign({},w,{start:st,off:off}))});
-    events().filter(function(e){return +e.d===+d&&e.kind==='termin'&&!e.weekly}).forEach(function(e){if(off===0&&e.tm!=null&&e.tm+90<nowMin)return;out.push({id:e.id,mod:e.mod,title:e.title,time:e.time,place:e.place,kind:'termin',d:d,start:e.tm,off:off,single:true})})});
+    events().filter(function(e){return +e.d===+d&&isTermin(e)&&!e.weekly}).forEach(function(e){if(off===0&&e.tm!=null&&e.tm+90<nowMin)return;out.push({id:e.id,mod:e.mod,title:e.title,time:e.time,place:e.place,kind:'termin',d:d,start:e.tm,off:off,single:true})})});
   out=out.filter(function(x,i){return x.single||!out.some(function(y){return y.single&&y.mod===x.mod&&y.off===x.off&&y.start===x.start})});
   out.sort(function(a,b){return a.off-b.off||((a.start||0)-(b.start||0))});return out.slice(0,6)}
 function prepFor(slot){var m=MOD[slot.mod];if(!m)return null;var title=(slot.title||'').toLowerCase();
@@ -166,6 +167,9 @@ function toast(msg){var t=document.createElement('div');t.className='toast';t.te
 /* ================= Router ================= */
 var UI={calY:TODAY.getFullYear(),calM:TODAY.getMonth(),calSel:ymd(TODAY),calOff:S.ui.calOff||{},calWeekly:!!S.ui.calWeekly,calGroups:S.ui.calGroups!==false,calView:S.ui.calView||'woche'};
 function saveUI(){S.ui.calOff=UI.calOff;S.ui.calWeekly=UI.calWeekly;S.ui.calGroups=UI.calGroups;S.ui.calView=UI.calView;save()}
+/* Wichtig für den Monat (Entscheidung 25.10.): Fristen, Prüfungen, Sondertermine (kind 'termin'); keine Einzeltermine von
+   Vorlesungen/Übungen (kind 'lv'), keine Wochenstunden, keine Präsenz-/Gruppenübungen. Die Woche zeigt alles. */
+function calImportant(e){return !e.weekly&&e.kind!=='lv'&&!isGroupEv(e)}
 function isGroupEv(e){return /Präsenzübung|Gruppenübung|Kleingruppe|Tutorium/i.test(e.title||'')}
 function calWeeklyOn(d){var G=(S.ui&&S.ui.grp)||{};return weeklyOn(d).filter(function(e){if(UI.calOff[e.mod])return false;if(e.grpKey)return UI.calGroups&&G[e.grpKey]===e.grp;return UI.calGroups||!isGroupEv(e)})}
 function grpPicker(){var G=(S.ui&&S.ui.grp)||{},keys={};MODS.forEach(function(m){m.weekly.forEach(function(w){if(w.grpKey){(keys[w.grpKey]=keys[w.grpKey]||{mod:m.id,label:w.grpLabel||'Gruppe',opts:[]}).opts.push(w)}})});
@@ -295,7 +299,7 @@ function evType(e){var t=e.title||'';
   if(/Vorlesung|^V\d|Kick-Off|Modul \d|Gastvorlesung|Grundlagen/i.test(t))return 'Vorlesung';
   return 'Termin'}
 function planRange(m){ /* Fach mit echtem Semesterplan (>=5 datierte Termine mit Ort): erster und letzter Termin */
-  if(m._pr!==undefined)return m._pr;var ds=m.events.filter(function(e){return e.kind==='termin'&&e.date&&e.time&&e.place}).map(function(e){return e.date}).sort();
+  if(m._pr!==undefined)return m._pr;var ds=m.events.filter(function(e){return isTermin(e)&&e.date&&e.time&&e.place}).map(function(e){return e.date}).sort();
   return m._pr=ds.length>=5?[ds[0],ds[ds.length-1]]:null}
 function dayItems(d){
   var y=ymd(d),evs=events().filter(function(e){return +e.d===+d&&!UI.calOff[e.mod]}),wl=calWeeklyOn(d),out=[];
@@ -331,9 +335,9 @@ function vKalender(){
   var h='<div class="wrap top"><div class="eyebrow">Stundenplan und Termine</div><h1>Kalender</h1>';
   h+='<div class="tabs" style="margin-top:12px"><button class="'+(view!=='monat'?'on':'')+'" data-act="calv" data-v="woche">Woche</button><button class="'+(view==='monat'?'on':'')+'" data-act="calv" data-v="monat">Monat</button></div></div><div class="wrap">';
   h+='<div class="filters" style="margin-top:12px">'+MODS.map(function(md){return '<button class="'+cls(md.id)+(UI.calOff[md.id]?' off':'')+'" data-act="calf" data-m="'+md.id+'"><span class="dot"></span>'+esc(SHORT[md.id])+'</button>'}).join('')+'</div>';
+  if(view==='monat')return h+vMonat()+'</div>'; /* Monat: nur Wichtiges, Stunden als Punkt am Tag */
   h+='<label class="toggle" style="margin-top:8px"><input type="checkbox" id="calg" data-act="calg"'+(UI.calGroups?' checked':'')+'> Gruppenübungen anzeigen <span class="muted small">(Präsenzübungen)</span></label>';
   if(UI.calGroups)h+=grpPicker();
-  if(view==='monat')return h+vMonat()+'</div>';
   var mo=monday(sel);
   h+='<div class="calhead" style="margin-top:12px"><button class="x" data-act="calwk" data-d="-7" aria-label="Vorherige Woche">'+IC.back+'</button><h2>'+fmtRange(mo,addDays(mo,6))+'</h2><button class="x" data-act="calwk" data-d="7" aria-label="Nächste Woche" style="transform:scaleX(-1)">'+IC.back+'</button></div>';
   h+='<div class="wk">';
@@ -350,9 +354,9 @@ function vMonat(){
   h+='<div class="calhead"><button class="x" data-act="calm" data-d="-1" aria-label="Vorheriger Monat">'+IC.back+'</button><h2>'+MON[m]+' '+y+'</h2><button class="x" data-act="calm" data-d="1" aria-label="Nächster Monat" style="transform:scaleX(-1)">'+IC.back+'</button></div>';
   h+='<div class="cal">'+['Mo','Di','Mi','Do','Fr','Sa','So'].map(function(w){return '<div class="wd">'+w+'</div>'}).join('');
   for(var i=0;i<42;i++){var d=addDays(start,i);if(i>=35&&d.getMonth()!==m)break;
-    var de=evs.filter(function(e){return +e.d===+d&&!UI.calOff[e.mod]});
-    de=de.concat(calWeeklyOn(d).filter(function(e){return !de.some(function(x){return x.mod===e.mod&&x.kind==='termin'&&x.tm!=null&&x.tm===tmin(e.time)})}));
-    h+='<button class="day'+(d.getMonth()!==m?' out':'')+(+d===+TODAY?' today':'')+(ymd(d)===UI.calSel?' sel':'')+'" data-act="cald" data-d="'+ymd(d)+'"><span class="dn">'+d.getDate()+'</span>'+
+    /* Monat: nur wichtige Termine (Inhaber 25.10.) – keine Wochenstunden, keine Präsenz-/Gruppenübungen; Stunden nur als dezenter Punkt */
+    var wk=calWeeklyOn(d),de=evs.filter(function(e){return +e.d===+d&&!UI.calOff[e.mod]&&calImportant(e)});
+    h+='<button class="day'+(d.getMonth()!==m?' out':'')+(+d===+TODAY?' today':'')+(ymd(d)===UI.calSel?' sel':'')+'" data-act="cald" data-d="'+ymd(d)+'"'+(wk.length?' title="'+wk.length+(wk.length===1?' Stunde':' Stunden')+'"':'')+'><span class="dn">'+d.getDate()+(wk.length?'<i class="std" aria-hidden="true"></i>':'')+'</span>'+
       de.slice(0,3).map(function(e){return '<span class="ev '+cls(e.mod)+(isDl(e)?' dl':'')+(S.done[e.id]?' done':'')+'"><span class="lbl">'+esc(e.title)+'</span></span>'}).join('')+(de.length>3?'<span class="small muted">+'+(de.length-3)+'</span>':'')+'</button>'}
   h+='</div>';
   h+=dayList(sel);
@@ -384,8 +388,7 @@ function vFaecher(){
      (p!=null?'<span class="bar sm on-band"><span style="width:'+p+'%"></span></span>':'')+(nx?'<span class="chip">'+esc(nx.name)+(nx.date?' '+rel(pd(nx.date)):' · Termin offen')+'</span>':'')+'</a>'});
   h+='<a class="tile m-studium" href="#/studium"><span class="n">Mein Studiengang</span><span class="s">Regeln, Fristen, Lernregeln, Einstellungen</span><span class="chip">Studienplan</span></a>';
   h+='<button class="tile m-mathe" data-act="dyn" style="text-align:left"><span class="n">Dynexite-Eingabe</span><span class="s">-1/2, 2*sqrt(3), exp(-2), abs(x) …</span><span class="chip">Testat-Format</span></button>';
-  h+='<button class="tile m-mech" data-act="unitsheet" style="text-align:left"><span class="n">Einheiten-Training</span><span class="s">MN → kN → N, m² → mm², N/mm² ↔ MPa</span><span class="chip">3 Stufen</span></button>';
-  h+='<a class="tile m-studium" href="#/symbole"><span class="n">Symbole und Zeichen</span><span class="s">Was bedeutet π, Σ, ∀ …?</span><span class="chip">'+symKeys().filter(symKnown).length+' / '+symKeys().length+' gekonnt</span>'+(symNew().length?'<span class="chip newc">'+symNew().length+' neu</span>':'')+'</a>';
+  h+='<a class="tile m-studium" href="#/symbole"><span class="n">Symbole, Zeichen und Einheiten</span><span class="s">Was bedeutet π, Σ, ∀ …? Und MN → kN → N, N/mm² ↔ MPa</span><span class="chip">'+symKeys().filter(symKnown).length+' / '+symKeys().length+' gekonnt</span>'+(symNew().length?'<span class="chip newc">'+symNew().length+' neu</span>':'')+'<span class="chip">3 Stufen</span></a>';
   return h+'</div></div>';
 }
 function modProgress(m){var ts=m.tasks;if(!ts.length)return null;var ok=ts.filter(function(t){return res(t.id)===1}).length;return Math.round(ok/ts.length*100)}
@@ -553,7 +556,7 @@ function startSymQuiz(mode,arg){var keys,title;
 }
 function vSymbole(){
   var keys=symKeys(),known=keys.filter(symKnown).length,nw=symNew(),chunks=symChunks(),best=S.ui.symAll;
-  var h='<div class="m-studium"><div class="band"><div class="wrap"><a class="back" href="#/faecher">'+IC.back+' Fächer</a><h1>Symbole und Zeichen</h1><p style="opacity:.9">Antippen für Bedeutung, Wert und Beispiel. Ziel: alle '+keys.length+' können.</p></div></div><div class="wrap">';
+  var h='<div class="m-studium"><div class="band"><div class="wrap"><a class="back" href="#/faecher">'+IC.back+' Fächer</a><h1>Symbole, Zeichen und Einheiten</h1><p style="opacity:.9">Antippen für Bedeutung, Wert und Beispiel. Ziel: alle '+keys.length+' können. <a href="#/symbole" data-act="tounits" style="color:inherit">Zum Einheiten-Training ↓</a></p></div></div><div class="wrap">';
   if(nw.length)h+='<section class="sec"><div class="newsym"><div class="grow"><b>'+nw.length+' neue '+(nw.length===1?'Zeichen':'Symbole und Zeichen')+'</b><div class="small">aus deinen Unterlagen dazugekommen · 15 pro Runde</div></div><button class="btn sm" data-act="symq" data-mode="new">Neue lernen</button></div></section>';
   h+='<section class="sec"><div class="grid2"><div class="card"><div class="muted small">Gekonnt</div><div class="kpi">'+known+' / '+keys.length+'</div><div class="bar ok" style="margin-top:8px"><span style="width:'+Math.round(known/keys.length*100)+'%"></span></div>'+
    '<button class="btn sm block soft" style="margin-top:8px" data-act="symq" data-mode="open"'+(known===keys.length?' disabled':'')+'>Offene üben</button></div>'+
@@ -564,6 +567,7 @@ function vSymbole(){
   Object.keys(groups).forEach(function(g){var sub=/^Formelzeichen|^Einheiten/.test(g),gk=groups[g].filter(symKnown).length,gn=groups[g].filter(function(k){return nw.indexOf(k)>=0}).length;
     h+='<section class="sec">'+(sub?'<details class="more list symdet"><summary>'+esc(g)+' <span class="chip">'+gk+'/'+groups[g].length+'</span>'+(gn?' <span class="chip newc">'+gn+' neu</span>':'')+'</summary>':'<h2>'+esc(g)+' <span class="chip">'+gk+'/'+groups[g].length+'</span></h2>')+'<div class="symgrid'+(sub?' pad':'')+'">'+groups[g].map(function(k){var s=D.symbols[k],isN=nw.indexOf(k)>=0;
     return '<button class="symtile'+(symKnown(k)?' known':'')+(isN?' isnew':'')+'" data-act="sym" data-s="'+k+'">'+(isN?'<span class="nb">neu</span>':symKnown(k)?'<span class="kb">'+IC.check+'</span>':'')+'<span class="sg">'+mx(s.tex)+'</span><span class="sn">'+esc(s.name)+'</span></button>'}).join('')+'</div>'+(sub?'</details>':'')+'</section>'});
+  h+='<section class="sec" id="einheiten"><h2>Einheiten-Training <span class="chip">3 Stufen</span></h2><div class="card">'+unitBody()+'<div class="btns"><button class="btn sm soft" data-act="unitsheet">Merkhilfe und Treppe</button></div></div></section>';
   return h+'</div></div>';
 }
 
@@ -913,11 +917,12 @@ function unitTraining(lvl){lvl=+lvl||1;
   runItems(unitItems(lvl,12),{title:'Einheiten · '+['','Stufe 1','Stufe 2','Stufe 3'][lvl],mode:'quiz',onEnd:function(r){var ok=r.filter(function(x){return x.r===1}).length,pct=Math.round(ok/r.length*100);
     S.ui.unitBest=S.ui.unitBest||{};S.ui.unitBest[lvl]=Math.max(S.ui.unitBest[lvl]||0,pct);save();if(pct>=90){confetti();activity(40)}
     return '<div class="center"><div class="big">'+pct+' %</div><p>'+ok+' von '+r.length+' richtig.'+(pct>=90&&lvl<3?' Bereit für Stufe '+(lvl+1)+'!':pct<90?' Ziel: 90 %.':' Stark!')+'</p><div class="btns" style="justify-content:center"><button class="btn" data-act="units" data-lvl="'+(pct>=90&&lvl<3?lvl+1:lvl)+'">'+(pct>=90&&lvl<3?'Stufe '+(lvl+1):'Nochmal')+'</button><button class="btn ghost" data-act="close">Fertig</button></div></div>'}})}
-function unitSheet(){var b=(S.ui&&S.ui.unitBest)||{};
+function unitBody(){var b=(S.ui&&S.ui.unitBest)||{};return '<div class="list">'+[[1,'Stufe 1','Länge, Fläche, Kraft, Masse · Nachbarstufen'],[2,'Stufe 2','plus Volumen, Liter, Zeit · mehrere Stufen, Kommazahlen'],[3,'Stufe 3','Spannung (N/mm², MPa, kN/cm²), Moment, Dichte, km/h']].map(function(x){
+     return '<div class="item"><span class="grow"><span class="t">'+x[1]+'</span><div class="s">'+x[2]+(b[x[0]]!=null?' · Bestwert <b>'+b[x[0]]+' %</b>':'')+'</div></span><button class="btn sm" data-act="units" data-lvl="'+x[0]+'">Start</button></div>'}).join('')+'</div>'}
+function unitSheet(){
   var h='<div class="m-mech"><h2>Einheiten umrechnen</h2><p class="muted">12 Aufgaben, jedes Mal neu gemischt. Antwort eintippen, Komma oder Punkt geht beides. Große Zahlen auch als 10^6.</p>'+
    '<figure class="fig"><svg viewBox="0 0 320 120" role="img" aria-label="Treppe Kraft"><g fill="none" stroke="currentColor" stroke-width="2"><path d="M10 30H110V60H210V90H310"/></g><g font-size="15" font-weight="700" fill="currentColor"><text x="45" y="22">MN</text><text x="148" y="52">kN</text><text x="255" y="82">N</text></g><g font-size="11" fill="currentColor" opacity=".7"><text x="66" y="50">·1000</text><text x="166" y="80">·1000</text></g><text x="10" y="114" font-size="11" fill="currentColor" opacity=".7">Treppe runter: mal · Treppe rauf: geteilt</text></svg></figure>'+
-   '<div class="list">'+[[1,'Stufe 1','Länge, Fläche, Kraft, Masse · Nachbarstufen'],[2,'Stufe 2','plus Volumen, Liter, Zeit · mehrere Stufen, Kommazahlen'],[3,'Stufe 3','Spannung (N/mm², MPa, kN/cm²), Moment, Dichte, km/h']].map(function(x){
-     return '<div class="item"><span class="grow"><span class="t">'+x[1]+'</span><div class="s">'+x[2]+(b[x[0]]!=null?' · Bestwert <b>'+b[x[0]]+' %</b>':'')+'</div></span><button class="btn sm" data-act="units" data-lvl="'+x[0]+'">Start</button></div>'}).join('')+'</div>'+
+   unitBody()+
    '<div class="card" style="margin-top:12px"><b>Merken</b><ul class="summary"><li>Länge: jede Stufe ·10 (km → m ·1000)</li><li>Fläche: jede Stufe ·100</li><li>Volumen: jede Stufe ·1000</li><li>Kraft: MN → kN → N jeweils ·1000</li>'+UNITHINT.stress.split(' · ').map(function(x){return '<li>'+x+'</li>'}).join('')+'</ul></div></div>';
   sheet(h,{title:'Einheiten-Training'})}
 
@@ -1175,6 +1180,9 @@ document.addEventListener('click',function(e){
   if(a==='eye'){var pi=$('#lpw');if(pi){pi.type=pi.type==='password'?'text':'password';t.classList.toggle('on',pi.type==='text')}return}
   if(a==='login'){var em=($('#lmail').value||'').trim(),pw=$('#lpw').value||'';if(!em||!pw){var le=$('#lerr');if(le)le.textContent='E-Mail und Passwort eingeben.';return}t.disabled=true;t.classList.add('busy');login(em,pw).then(function(){toast('Willkommen!');rerender();syncNow(false)}).catch(function(e){t.disabled=false;t.classList.remove('busy');var el=$('#lerr');if(el)el.textContent=/invalid/i.test(e.message)?'E-Mail oder Passwort stimmt nicht.':'Anmeldung fehlgeschlagen: '+e.message});return}
   if(a==='forgot'){var em2=($('#lmail').value||'').trim();if(!em2){toast('Erst die E-Mail eintragen.');return}try{localStorage.setItem('studium-recover',em2)}catch(e){}recover(em2).then(function(){toast('Falls ein Konto existiert, kommt gleich eine E-Mail.')}).catch(function(e){toast('Fehler: '+e.message)});return}
+  if(a==='pwset'){var cm=(($('#pwmail')||{}).value||'').trim().toLowerCase(),acct=((AUTH.user&&AUTH.user.email)||'').toLowerCase();
+    if(!cm){toast('Bitte deine E-Mail zur Bestätigung eintragen.');return}
+    if(!acct||cm!==acct){logout();toast('Dieser Link gehört nicht zu deinem Konto.');rerender();return}} /* Befund 6b: fremder Link → Sitzung verwerfen */
   if(a==='pwset'||a==='pwchange'){var p1=a==='pwset'?($('#pw1').value||''):prompt('Neues Passwort (mind. 12 Zeichen, Groß/Klein, Zahl, Sonderzeichen):'),p2=a==='pwset'?($('#pw2').value||''):p1;if(p1==null)return;if(p1.length<12){toast('Mindestens 12 Zeichen.');return}if(p1!==p2){toast('Die Passwörter stimmen nicht überein.');return}setPassword(p1).then(function(){AUTH.recovery=false;authSave();toast('Passwort gespeichert.');rerender()}).catch(function(e){toast('Fehler: '+e.message)});return}
   if(a==='syncnow'){syncNow(false).then(function(){toast(SY.err?'Problem: '+SY.err:'Synchronisiert.')});return}
   if(a==='logout'){logout();toast('Abgemeldet.');rerender();return}
@@ -1184,6 +1192,7 @@ document.addEventListener('click',function(e){
   if(a==='dyntrain'){dynTraining();return}
   if(a==='symq'){startSymQuiz(t.getAttribute('data-mode'),t.getAttribute('data-arg'));return}
   if(a==='units'){unitTraining(t.getAttribute('data-lvl'));return}
+  if(a==='tounits'){e.preventDefault();var ue=document.getElementById('einheiten');if(ue)ue.scrollIntoView({behavior:reduceMotion?'auto':'smooth',block:'start'});return}
   if(a==='unitsheet'){unitSheet();return}
   if(a==='fquiz'){formulaQuiz(t.getAttribute('data-m'));return}
   if(a==='focus'){focusTimer();return}
@@ -1239,15 +1248,16 @@ function recover(email){return sbFetch('/auth/v1/recover?redirect_to='+encodeURI
 function setPassword(pw){return authReady().then(function(){return sbAuthed('/auth/v1/user',{method:'PUT',body:JSON.stringify({password:pw})})})}
 /* Rückkehr vom „Passwort vergessen“-Link. Zwei Formen: #token_hash=…&type=recovery (sicher gegen Mail-Scanner, die App bestätigt den
    Link selbst) oder #access_token=…&type=recovery (Standardvorlage von Supabase). */
-(function(){var h=location.hash||'';if(!/type=recovery|token_hash=|access_token=|error_description=/.test(h))return;var q={};h.replace(/^#\/?/,'').split('&').forEach(function(kv){var i=kv.indexOf('=');if(i>0){try{q[decodeURIComponent(kv.slice(0,i))]=decodeURIComponent(kv.slice(i+1))}catch(e){}}});
+(function(){var h=location.hash||'';if(!/type=recovery|type=invite|token_hash=|access_token=|error_description=/.test(h))return;var q={};h.replace(/^#\/?/,'').split('&').forEach(function(kv){var i=kv.indexOf('=');if(i>0){try{q[decodeURIComponent(kv.slice(0,i))]=decodeURIComponent(kv.slice(i+1))}catch(e){}}});
   history.replaceState(null,'',location.pathname+'#/studium'); /* Token sofort aus der Adresszeile (Verlauf, Screenshots) */
   var bad=function(){setTimeout(function(){toast('Der Link ist ungültig oder abgelaufen. Bitte neu anfordern.')},800)};
   var expect='';try{expect=localStorage.getItem('studium-recover')||''}catch(e){}
   function take(j){var u=j.user;if(!u||!u.email||(expect&&u.email.toLowerCase()!==expect.toLowerCase()))return bad();
-    AUTH={access_token:j.access_token,refresh_token:j.refresh_token,exp:j.expires_at?j.expires_at*1000:Date.now()+(+j.expires_in||3600)*1000,user:u,recovery:true};authSave();try{localStorage.removeItem('studium-recover')}catch(e){}rerender()}
-  if(q.type!=='recovery'&&!q.error_description)return bad();
+    AUTH={access_token:j.access_token,refresh_token:j.refresh_token,exp:j.expires_at?j.expires_at*1000:Date.now()+(+j.expires_in||3600)*1000,user:u,recovery:vtype==='invite'?'invite':true};authSave();try{localStorage.removeItem('studium-recover')}catch(e){}rerender()}
+  var vtype=q.type==='invite'?'invite':'recovery'; /* Einladung (Konto vom Inhaber angelegt) läuft wie „Passwort vergessen“ */
+  if(q.type!=='recovery'&&q.type!=='invite'&&!q.error_description)return bad();
   if(q.token_hash){ /* sicherer Weg: der Server bestätigt den Link und liefert Nutzer + Sitzung */
-    sbFetch('/auth/v1/verify',{method:'POST',body:JSON.stringify({type:'recovery',token_hash:q.token_hash})},true).then(take).catch(bad)}
+    sbFetch('/auth/v1/verify',{method:'POST',body:JSON.stringify({type:vtype,token_hash:q.token_hash})},true).then(take).catch(bad)}
   else if(q.access_token){ /* Standardvorlage: Token nur annehmen, wenn der Server ihn als Nutzer dieses Projekts bestätigt */
     sbFetch('/auth/v1/user',{headers:{'Authorization':'Bearer '+q.access_token}},true).then(function(u){take({access_token:q.access_token,refresh_token:q.refresh_token,expires_in:q.expires_in,user:u})}).catch(bad)}
   else if(q.error_description)bad()})();
@@ -1280,7 +1290,8 @@ function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;D.mods.forEa
   '<p class="lg-by"><b>Von RWTH-Studenten für RWTH-Studenten.</b><span>Gerade: Wirtschaftsingenieurwesen Bau, 1. Semester – weitere Studiengänge folgen.</span></p>'+
   '<ul class="lg-stats"><li><b>'+nM+'</b><span>Fächer</span></li><li><b>'+nT+'</b><span>Aufgaben</span></li><li><b>'+nF+'</b><span>Formeln</span></li><li><b>∞</b><span>Zufallszahlen</span></li></ul></section>'+
   '<section class="lg-card" aria-label="'+(rec?'Neues Passwort setzen':'Anmelden')+'">'+
-  (rec?'<h2>Neues Passwort</h2><p class="small muted">Mindestens 12 Zeichen mit Groß- und Kleinbuchstaben, Zahl und Sonderzeichen.</p>'+
+  (rec?'<h2>'+(rec==='invite'?'Passwort festlegen':'Neues Passwort')+'</h2><p class="small muted">Für das Konto <b id="pwacct">'+esc((AUTH.user&&AUTH.user.email)||'')+'</b>. Mindestens 12 Zeichen mit Groß- und Kleinbuchstaben, Zahl und Sonderzeichen.</p>'+
+     '<label class="lg-f"><input id="pwmail" type="email" placeholder=" " autocomplete="email" required><span>Deine E-Mail zur Bestätigung</span></label>'+
      '<label class="lg-f"><input id="pw1" type="password" placeholder=" " autocomplete="new-password"><span>Neues Passwort</span></label>'+
      '<label class="lg-f"><input id="pw2" type="password" placeholder=" " autocomplete="new-password"><span>Noch einmal</span></label>'+
      '<button class="btn lg-go" data-act="pwset">Speichern '+IC.chev+'</button>'

@@ -574,9 +574,6 @@ body.pg-gdm .bgart{background-image:url(scene-gdm-light.svg)}
 body.pg-mech .bgart{background-image:url(scene-mech-light.svg)}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) body.pg-mech .bgart{background-image:url(scene-mech-dark.svg)}}
 :root[data-theme="dark"] body.pg-mech .bgart{background-image:url(scene-mech-dark.svg)}
-body.pg-spa .bgart{background-image:url(scene-spa-light.svg)}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) body.pg-spa .bgart{background-image:url(scene-spa-dark.svg)}}
-:root[data-theme="dark"] body.pg-spa .bgart{background-image:url(scene-spa-dark.svg)}
 @media (min-width:900px){.bgart{-webkit-mask:linear-gradient(90deg,#000 0,#000 calc(50% - 470px),rgba(0,0,0,.18) calc(50% - 400px),rgba(0,0,0,.18) calc(50% + 400px),#000 calc(50% + 470px),#000 100%);mask:linear-gradient(90deg,#000 0,#000 calc(50% - 470px),rgba(0,0,0,.18) calc(50% - 400px),rgba(0,0,0,.18) calc(50% + 400px),#000 calc(50% + 470px),#000 100%)}}
 @media (max-width:899px){.bgart{opacity:calc(var(--sceneo) * .65)}}
 .card,.list,.qcard,.fxcard,.symtile,.hcard,.tl-it,.wk-d,.stat{border-width:2.5px;box-shadow:0 0 0 4px color-mix(in srgb,var(--hi) 16%,transparent),0 14px 34px rgba(60,25,10,.22)}
@@ -666,7 +663,7 @@ body[data-page=heute] .notice,body[data-page=heute] main .banner{background:colo
 /* V3: illustrierter Kopfbereich statt Muster */
 body .band::before{display:none!important}
 body .band{min-height:230px;background:linear-gradient(100deg,var(--band) 30%,color-mix(in srgb,var(--band) 70%,transparent) 55%,transparent 85%),var(--bandimg) right bottom/auto 150% no-repeat,var(--band)}
-body.pg-studium{--bandimg:url(scene-studium-dark.svg)}body.pg-mathe{--bandimg:url(scene-mathe-dark.svg)}body.pg-stat{--bandimg:url(scene-stat-dark.svg)}body.pg-bsk{--bandimg:url(scene-bsk-dark.svg)}body.pg-bure{--bandimg:url(scene-bure-dark.svg)}body.pg-gdm{--bandimg:url(scene-gdm-dark.svg)}body.pg-mech{--bandimg:url(scene-mech-dark.svg)}body.pg-spa{--bandimg:url(scene-spa-dark.svg)}
+body.pg-studium{--bandimg:url(scene-studium-dark.svg)}body.pg-mathe{--bandimg:url(scene-mathe-dark.svg)}body.pg-stat{--bandimg:url(scene-stat-dark.svg)}body.pg-bsk{--bandimg:url(scene-bsk-dark.svg)}body.pg-bure{--bandimg:url(scene-bure-dark.svg)}body.pg-gdm{--bandimg:url(scene-gdm-dark.svg)}body.pg-mech{--bandimg:url(scene-mech-dark.svg)}
 /* V4: Fortschrittsbalken in Fachfarbe */
 body .bar{background:color-mix(in srgb,var(--hi) 22%,transparent)!important}
 body .bar>span{background:linear-gradient(90deg,var(--hi),color-mix(in srgb,var(--hi) 70%,#fff))!important}
@@ -766,6 +763,8 @@ body.pg-login .sqh{display:none}
 @media (max-width:899px) and (max-height:760px){.lg-mark{display:none}.lg-kick{margin:0 0 4px}.lg-hero h1{font-size:30px}.lg-sub{display:none}.lg-by{margin-top:6px}.lg-by span{display:none}.lg-stats{margin-top:10px}.lg-card{padding:14px 14px 12px}.lg-card h2{font-size:22px}.lg-card .muted{display:none}.lg-foot{margin-top:8px;padding-top:8px}.lg-in{padding-top:12px;padding-bottom:12px;gap:10px}}
 .lg-caps{display:none;margin:6px 0 0;font-size:12px;color:#ffd36b}.lg-caps.on{display:block}
 @media (prefers-reduced-motion:reduce){.lg-card{animation:none}}
+/* Kalender Monat: Tage mit Stunden nur als dezenter Punkt */
+.cal .day .dn .std{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--faint);margin-left:4px;vertical-align:middle;opacity:.8}
 /* ===== Schritt-Animationen (Player, SCHEMA.md NACHTRAG 5) ===== */
 figure.anim{margin:0;color:var(--ink);outline:none}
 .story figure.anim{margin:12px 0}
