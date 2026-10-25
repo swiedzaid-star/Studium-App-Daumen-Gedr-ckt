@@ -154,7 +154,7 @@ function ck(id,label){var on=!!S.done[id];return '<button class="ck'+(on?' on':'
 function wideMath(el){try{(el||document).querySelectorAll('mjx-container:not([display="true"])').forEach(function(m){var p=m.parentElement;if(!p)return;var w=m.getBoundingClientRect().width,c=p.clientWidth-(m.closest('.anim-f')?20:0);if(w<=c+1)return;
   if(m.closest('.anim-f')&&c/w>=.66){m.style.fontSize=(Math.floor(c/w*100)/100)+'em';return} /* Animation: Ergebnis soll ganz sichtbar sein, lieber etwas kleiner */
   m.classList.add('mjwide')})}catch(e){}}
-function ts(el){try{if(window.MathJax&&MathJax.typesetPromise){if(MathJax.typesetClear)MathJax.typesetClear([el]);MathJax.typesetPromise([el]).then(function(){wideMath(el)}).catch(function(){})}}catch(e){}}
+function ts(el){try{if(window.MathJax&&MathJax.typesetPromise){if(MathJax.typesetClear)MathJax.typesetClear([el]);return MathJax.typesetPromise([el]).then(function(){wideMath(el)}).catch(function(){})}}catch(e){}return Promise.resolve()}
 window.__typesetMain=function(){ts(main);if(!layer.hidden)ts(layer)};
 setTimeout(function(){if(!(window.MathJax&&MathJax.typesetPromise)){document.body.classList.add('nomj');toast('Formeln werden gerade nur als Text gezeigt (kein Internet?).')}},7000);
 
@@ -193,7 +193,7 @@ function route(keep){try{ensureFixPlans()}catch(e){}
   main.innerHTML=html;animInit(main);
   $$('.nav a').forEach(function(a){a.classList.toggle('on',a.getAttribute('data-v')===(v==='fach'||v==='studium'||v==='symbole'?'faecher':v))});
   var nb=$('#navbadge'),mc=missed().length;if(nb){nb.textContent=mc;nb.hidden=!mc}
-  window.scrollTo(0,keep?y:0);ts(main);
+  window.scrollTo(0,keep?y:0);var tp=ts(main);if(keep&&y){ /* Lesestelle halten: nach dem Formelsatz verschieben sich Höhen, deshalb noch einmal hinspringen */ tp.then(function(){window.scrollTo(0,y)});var n=0,iv=setInterval(function(){window.scrollTo(0,y);if(++n>=5)clearInterval(iv)},150)}
   var on=$('.tabs .on',main);if(on&&on.scrollIntoView)try{on.scrollIntoView({inline:'center',block:'nearest'})}catch(e){}
   var fc=main.querySelector('.hcard:not(.done)');if(fc)fc.classList.add('focus');
   setTimeout(hideSquirrel,80);
@@ -1060,11 +1060,12 @@ function focusTimer(){
 
 /* ================= Ebene (Sheets) ================= */
 var stack=[];
-function sheet(html,o){o=o||{};if(o.replace&&stack.length)stack[stack.length-1]={html:html,title:o.title};else stack.push({html:html,title:o.title});drawSheet()}
+function sheet(html,o){o=o||{};if(o.replace&&stack.length)stack[stack.length-1]={html:html,title:o.title};else{if(stack.length)stack[stack.length-1].scroll=layer.scrollTop;stack.push({html:html,title:o.title})}drawSheet()}
 function drawSheet(){var top=stack[stack.length-1];if(!top){layer.hidden=true;document.body.classList.remove('noscroll');return}
   layer.hidden=false;document.body.classList.add('noscroll');
   layer.innerHTML='<div class="lhead"><div class="wrap"><button class="x" data-act="'+(stack.length>1?'pop':'close')+'" aria-label="'+(stack.length>1?'Zurück':'Schließen')+'">'+(stack.length>1?IC.back:IC.x)+'</button><b class="grow">'+esc(top.title||'')+'</b></div></div><div class="wrap lbody">'+top.html+'</div>';
-  layer.scrollTop=0;ts(layer)}
+  /* Zurück zu einer vorherigen Karte: an der alten Lesestelle weitermachen (auch nach dem Formelsatz) */
+  var y=top.scroll||0;layer.scrollTop=y;ts(layer);if(y){var n=0,iv=setInterval(function(){layer.scrollTop=y;if(++n>=6)clearInterval(iv)},120)}}
 function closeAll(){stack=[];clearInterval(focusIv);drawSheet()}
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&stack.length){stack.pop();drawSheet()}});
 
