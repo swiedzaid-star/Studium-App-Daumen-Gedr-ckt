@@ -735,7 +735,7 @@ body.pg-login .sqh{display:none}
 .lg-card{position:relative;padding:20px 18px 16px;border-radius:24px;background:rgba(20,26,46,.72);border:1px solid rgba(255,255,255,.14);box-shadow:0 30px 60px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.12);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
 .lg-card::before{content:"";position:absolute;inset:-1px;border-radius:25px;padding:1px;background:linear-gradient(135deg,rgba(255,176,32,.9),rgba(255,47,138,.4) 50%,rgba(59,107,255,.6));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;opacity:.8}
 .lg-card h2{font-size:24px;color:#fff;margin-bottom:4px}
-.lg-card .muted{color:rgba(255,255,255,.65)}
+.lg-card .muted,.lg-card .small{color:rgba(255,255,255,.62);text-shadow:none;font-weight:400}
 .lg-f{position:relative;display:block;margin-top:10px}
 .lg-f input{width:100%;font:inherit;font-size:16px;padding:25px 48px 7px 14px;border-radius:14px;border:1.5px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff;outline:none;transition:border-color .15s,background .15s}
 .lg-f input:focus{border-color:#ffb020;background:rgba(255,255,255,.1)}
