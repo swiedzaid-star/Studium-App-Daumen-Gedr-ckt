@@ -701,3 +701,5 @@ mjx-container.mjwide{display:inline-block;max-width:100%;overflow-x:auto;overflo
 .lec .tt,.sec .tt{display:block;max-width:100%;overflow-x:auto}
 
 .note-l{margin:0 0 6px}.note-l:last-child{margin:0}.note-l b.nl{color:var(--acc)}
+
+.boot{display:flex;flex-direction:column;align-items:center;gap:12px;padding:120px 16px}.bootspin{width:28px;height:28px;border-radius:50%;border:3px solid var(--acc-soft,#eee);border-top-color:var(--acc,#f90);animation:bootspin .9s linear infinite}@keyframes bootspin{to{transform:rotate(360deg)}}

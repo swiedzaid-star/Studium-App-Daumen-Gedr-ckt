@@ -22,10 +22,20 @@ try{reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches}c
 var KEY='studium-v1', S;
 var DEVID=(function(){try{var d=localStorage.getItem('device');if(!d){d=Math.random().toString(36).slice(2,10);localStorage.setItem('device',d)}return d}catch(e){return 'x'}})(),DEVNAME=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)?'Handy':'Laptop';
 var SYNCKEY='studium-sync',SY;try{SY=JSON.parse(localStorage.getItem(SYNCKEY))||{}}catch(e){SY={}}
+var AUTHKEY='studium-auth',AUTH;try{AUTH=JSON.parse(localStorage.getItem(AUTHKEY))||{}}catch(e){AUTH={}}
 try{S=JSON.parse(localStorage.getItem(KEY))||{}}catch(e){S={}}
-['done','tasks','cards','diag','plans','quiz','rules','todos','days','haeppchen','kr','ui','read','sym','nach','mast'].forEach(function(k){S[k]=S[k]||{}});
+var SECTIONS=['done','tasks','cards','diag','plans','quiz','rules','todos','days','haeppchen','kr','ui','read','sym','nach','mast'],SCALARS=['xp','name','theme'];
+SECTIONS.forEach(function(k){S[k]=S[k]||{}});S._ts=S._ts||{};S._v=2;
+/* Zeitstempel je Schlüssel: Beim Speichern wird jeder Abschnitt mit dem letzten Stand verglichen; was sich geändert hat, bekommt
+   S._ts[abschnitt][schluessel]=jetzt. Damit kann der Sync später Gerät für Gerät zusammenführen, ohne dass Altes Neues überschreibt. */
+var SNAP={};function snapInit(){SECTIONS.forEach(function(sec){var o=S[sec],sn=SNAP[sec]={};Object.keys(o).forEach(function(k){sn[k]=JSON.stringify(o[k])})});SNAP._s={};SCALARS.forEach(function(k){SNAP._s[k]=JSON.stringify(S[k])})}
+function stamp(){var now=Date.now();SECTIONS.forEach(function(sec){var o=S[sec]||{},sn=SNAP[sec]||(SNAP[sec]={}),ts=S._ts[sec]=S._ts[sec]||{};
+  Object.keys(o).forEach(function(k){var j=JSON.stringify(o[k]);if(sn[k]!==j){sn[k]=j;ts[k]=now}});
+  Object.keys(sn).forEach(function(k){if(!(k in o)){delete sn[k];ts[k]=now}})});
+  var ts=S._ts._s=S._ts._s||{};SCALARS.forEach(function(k){var j=JSON.stringify(S[k]);if(SNAP._s[k]!==j){SNAP._s[k]=j;ts[k]=now}})}
+snapInit();
 S.xp=S.xp||0;
-function save(){S._mod=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(typeof syLater==='function')syLater()}
+function save(){stamp();S._mod=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(typeof syLater==='function')syLater()}
 if(S.theme)document.documentElement.setAttribute('data-theme',S.theme);
 
 /* ---------- Datum ---------- */
@@ -163,6 +173,7 @@ function route(keep){try{ensureFixPlans()}catch(e){}
   var v=p[0]||'heute',html='';
   document.body.setAttribute('data-page',v==='fach'&&MOD[p[1]]?'fach':v);['mathe','stat','bsk','bure','gdm','mech','spa','studium'].forEach(function(k){document.body.classList.remove('pg-'+k)});if(v==='fach'&&MOD[p[1]])document.body.classList.add('pg-'+p[1]);if(v==='studium'||v==='symbole')document.body.classList.add('pg-studium');
   try{
+    if(!loggedIn()){main.innerHTML=vLogin();document.body.setAttribute('data-page','studium');document.body.classList.add('pg-studium');window.scrollTo(0,0);return}
     if(v==='heute')html=vHeute();
     else if(v==='kalender')html=vKalender();
     else if(v==='fristen')html=vFristen(p[1]||'bald');
@@ -181,6 +192,7 @@ function route(keep){try{ensureFixPlans()}catch(e){}
   setTimeout(hideSquirrel,80);
 }
 window.addEventListener('hashchange',function(){route(false);markLast()});
+document.addEventListener('keydown',function(e){if(e.key==='Enter'&&e.target&&(e.target.id==='lpw'||e.target.id==='lmail')){var b=$('[data-act=login]');if(b)b.click()}});
 /* Weitermachen auf dem anderen Gerät */
 var scrollT=null,handoffBusy=false;
 function markLast(){if(handoffBusy)return;S.ui.last={h:location.hash||'#/heute',t:Date.now(),dev:DEVID,dn:DEVNAME,y:0};save()}
@@ -1060,7 +1072,7 @@ document.addEventListener('click',function(e){
   if(a==='learnok'){var f=LEARN_THEN;LEARN_THEN=null;if(f){try{f()}catch(err){console.error(err)}}setTimeout(function(){if(document.getElementById('learnok')){closeAll();toast('Für dieses Thema gibt es gerade keine offenen Aufgaben. Alles gekonnt!');rerender()}},400);return}
   if(a==='setname'){var v=(($('#nm')||{}).value||'').trim().slice(0,30);if(v){S.name=v;save();rerender()}return}
   if(a==='terms'){sheet('<div class="story"><h2>Nutzungsbedingungen</h2><p class="small muted">Stand: 23.10.2026</p><h3 class="sh">1. Angebot</h3><div class="sp">Diese Lern-App ist ein kostenloses, privates Angebot (Betreiber: GitHub-Nutzer swiedzaid-star) für Studierende. Sie ist kein Angebot der RWTH Aachen. Es besteht kein Anspruch auf Verfügbarkeit oder bestimmte Funktionen; die App kann jederzeit geändert oder eingestellt werden.</div><h3 class="sh">2. Keine Gewähr</h3><div class="sp">Inhalte, Termine, Lernpläne und Klausur-Einschätzungen werden sorgfältig erstellt, sind aber ohne Gewähr. Verbindlich sind ausschließlich die Angaben der Hochschule (RWTHonline, Moodle, Lehrstühle). Einschätzungen zu Prüfungen sind Prognosen, keine Zusagen.</div><h3 class="sh">3. Urheberrecht</h3><div class="sp">Texte, Aufgaben, Lösungswege, Grafiken, das Design und das Maskottchen sind urheberrechtlich geschützt. Alle Rechte vorbehalten. Erlaubt ist die Nutzung zum eigenen Lernen. Nicht erlaubt ist ohne schriftliche Zustimmung: Inhalte kopieren, veröffentlichen, weitergeben, verkaufen, automatisiert auslesen (Scraping) oder in andere Apps, Websites oder KI-Trainingsdaten übernehmen.</div><h3 class="sh">4. Haftung</h3><div class="sp">Da die App unentgeltlich ist, haftet der Betreiber nur für Vorsatz und grobe Fahrlässigkeit sowie bei Verletzung von Leben, Körper oder Gesundheit. Für Datenverlust (z. B. durch Löschen der Browserdaten) wird nicht gehaftet; nutze bei Bedarf den Sync oder „Fortschritt kopieren“.</div><h3 class="sh">5. Schlussbestimmungen</h3><div class="sp">Es gilt deutsches Recht. Sollte eine Bestimmung unwirksam sein, bleiben die übrigen wirksam.</div></div>',{title:'Nutzungsbedingungen'});return}
-  if(a==='privacy'){sheet('<div class="story"><h2>Datenschutz und Hinweise</h2><h3 class="sh">Was ist das?</h3><div class="sp">Eine private, nicht kommerzielle Lern-App eines Studierenden für das eigene Studium. <b>Kein offizielles Angebot der RWTH Aachen</b> und nicht mit ihr verbunden. Alle Angaben ohne Gewähr; verbindlich sind immer RWTHonline, Moodle und die Lehrstühle.</div><h3 class="sh">Verantwortlich</h3><div class="sp">GitHub-Nutzer <b>swiedzaid-star</b>. Kontakt über das GitHub-Repository dieser App (github.com/swiedzaid-star/Studium-App-Daumen-Gedr-ckt, „Issues“).</div><h3 class="sh">Welche Daten anfallen</h3><div class="sp"><b>Hosting:</b> Die Seite liegt bei GitHub Pages (GitHub Inc., USA). GitHub verarbeitet beim Aufruf technisch nötige Daten wie die IP-Adresse in Server-Logs. Details: GitHub Privacy Statement (docs.github.com, „GitHub General Privacy Statement“).<br><b>Dein Fortschritt</b> wird nur in deinem Browser gespeichert (lokaler Speicher). Es gibt keine Cookies, kein Tracking, keine Werbung und keine Schriften oder Skripte von fremden Servern.<br><b>Synchronisieren (freiwillig):</b> Nur wenn du es selbst einrichtest. Dann liegt dein Fortschritt in einer privaten Datei (Gist) in <b>deinem eigenen</b> GitHub-Konto. Dein Schlüssel bleibt nur in deinem Browser und wird an niemanden sonst geschickt.</div><h3 class="sh">Deine Rechte</h3><div class="sp">Der Betreiber erhält keine Daten von dir. Löschen kannst du alles selbst: Browserdaten dieser Seite löschen bzw. beim Sync den Gist in deinem GitHub-Konto löschen. Du hast außerdem die Rechte aus der DSGVO (Auskunft, Löschung, Beschwerde bei einer Datenschutz-Aufsichtsbehörde).</div><h3 class="sh">Inhalte</h3><div class="sp">Zusammenfassungen, Erklärungen und Aufgaben sind eigene Texte und eigene Aufgaben (teils angelehnt an Themen und Aufgabentypen der Lehrveranstaltungen). Es werden keine Vorlesungsfolien, Skripte oder Altklausuren der Lehrstühle wiedergegeben. © 2026 swiedzaid-star, alle Rechte vorbehalten (siehe Nutzungsbedingungen). Schriften: Plus Jakarta Sans und JetBrains Mono (SIL Open Font License), Formeln: MathJax (Apache License 2.0), lokal eingebunden.</div></div>',{title:'Datenschutz'});return}
+  if(a==='privacy'){sheet('<div class="story"><h2>Datenschutz und Hinweise</h2><h3 class="sh">Was ist das?</h3><div class="sp">Eine private, nicht kommerzielle Lern-App eines Studierenden für das eigene Studium. <b>Kein offizielles Angebot der RWTH Aachen</b> und nicht mit ihr verbunden. Alle Angaben ohne Gewähr; verbindlich sind immer RWTHonline, Moodle und die Lehrstühle.</div><h3 class="sh">Verantwortlich</h3><div class="sp">GitHub-Nutzer <b>swiedzaid-star</b>. Kontakt über das GitHub-Repository dieser App (github.com/swiedzaid-star/Studium-App-Daumen-Gedr-ckt, „Issues“).</div><h3 class="sh">Welche Daten anfallen</h3><div class="sp"><b>Hosting:</b> Die Seite liegt bei GitHub Pages (GitHub Inc., USA). GitHub verarbeitet beim Aufruf technisch nötige Daten wie die IP-Adresse in Server-Logs. Details: GitHub Privacy Statement (docs.github.com, „GitHub General Privacy Statement“).<br><b>Konto und Fortschritt:</b> Die Anmeldung und dein Lernfortschritt laufen über Supabase (Supabase Inc.; Server in Frankfurt, EU). Gespeichert werden E-Mail-Adresse, Passwort (verschlüsselt als Hash), Anmeldezeitpunkte und dein Fortschritt (erledigte Aufgaben, Karteikarten, Pläne, Einstellungen, Vorname, falls angegeben). Zusätzlich liegt eine Kopie im lokalen Speicher deines Browsers, damit die App offline funktioniert. Es gibt keine Registrierung, kein Tracking, keine Werbung und keine Schriften oder Skripte von fremden Servern.</div><h3 class="sh">Deine Rechte</h3><div class="sp">Auskunft, Berichtigung und Löschung deines Kontos samt Fortschritt jederzeit über den Kontakt oben; lokale Daten löschst du über die Browserdaten dieser Seite. Du hast außerdem die Rechte aus der DSGVO (Auskunft, Löschung, Beschwerde bei einer Datenschutz-Aufsichtsbehörde).</div><h3 class="sh">Inhalte</h3><div class="sp">Zusammenfassungen, Erklärungen und Aufgaben sind eigene Texte und eigene Aufgaben (teils angelehnt an Themen und Aufgabentypen der Lehrveranstaltungen). Es werden keine Vorlesungsfolien, Skripte oder Altklausuren der Lehrstühle wiedergegeben. © 2026 swiedzaid-star, alle Rechte vorbehalten (siehe Nutzungsbedingungen). Schriften: Plus Jakarta Sans und JetBrains Mono (SIL Open Font License), Formeln: MathJax (Apache License 2.0), lokal eingebunden.</div></div>',{title:'Datenschutz'});return}
   if(a==='close'){closeAll();rerender();return}
   if(a==='sessdone'){var pp=S.plans[t.getAttribute('data-x')];if(pp){pp.done[t.getAttribute('data-s')]=true;activity(10);save()}closeAll();toast('Abgehakt. Stark!');rerender();return}
   if(a==='pop'){stack.pop();drawSheet();return}
@@ -1093,9 +1105,11 @@ document.addEventListener('click',function(e){
   if(a==='runsess'){runSession(t.getAttribute('data-x'),t.getAttribute('data-s'));return}
   if(a==='sess'){var p=S.plans[t.getAttribute('data-x')],sid=t.getAttribute('data-s');if(p){p.done[sid]=!p.done[sid];if(p.done[sid])activity(10);save();rerender()}return}
   if(a==='kr'){kopfrechnen();return}
-  if(a==='syncon'){var tk=($('#sytok').value||'').trim();if(!/^(ghp_|github_pat_)/.test(tk)){toast('Das sieht nicht wie ein GitHub-Schlüssel aus (ghp_…).');return}SY={token:tk};sySave();toast('Verbinde …');syncNow(false).then(function(){toast(SY.err?'Problem: '+SY.err:'Verbunden!');rerender()});return}
+  if(a==='login'){var em=($('#lmail').value||'').trim(),pw=$('#lpw').value||'';if(!em||!pw){toast('E-Mail und Passwort eingeben.');return}t.disabled=true;login(em,pw).then(function(){toast('Willkommen!');rerender();syncNow(false)}).catch(function(e){t.disabled=false;var el=$('#lerr');if(el)el.textContent=/invalid/i.test(e.message)?'E-Mail oder Passwort stimmt nicht.':'Anmeldung fehlgeschlagen: '+e.message});return}
+  if(a==='forgot'){var em2=($('#lmail').value||'').trim();if(!em2){toast('Erst die E-Mail eintragen.');return}recover(em2).then(function(){toast('Falls ein Konto existiert, kommt gleich eine E-Mail.')}).catch(function(e){toast('Fehler: '+e.message)});return}
+  if(a==='pwset'||a==='pwchange'){var p1=a==='pwset'?($('#pw1').value||''):prompt('Neues Passwort (mind. 12 Zeichen, Groß/Klein, Zahl, Sonderzeichen):'),p2=a==='pwset'?($('#pw2').value||''):p1;if(p1==null)return;if(p1.length<12){toast('Mindestens 12 Zeichen.');return}if(p1!==p2){toast('Die Passwörter stimmen nicht überein.');return}setPassword(p1).then(function(){AUTH.recovery=false;authSave();toast('Passwort gespeichert.');rerender()}).catch(function(e){toast('Fehler: '+e.message)});return}
   if(a==='syncnow'){syncNow(false).then(function(){toast(SY.err?'Problem: '+SY.err:'Synchronisiert.')});return}
-  if(a==='syncoff'){SY={};sySave();toast('Auf diesem Gerät getrennt.');rerender();return}
+  if(a==='logout'){logout();toast('Abgemeldet.');rerender();return}
   if(a==='nach'){runNach(t.getAttribute('data-l'));return}
   if(a==='nachredo'){var its=window.__nachWrong||[];if(its.length)runItems(its,{title:'Lücken nochmal',mode:'practice'});return}
   if(a==='dyn'){dynSheet();return}
@@ -1128,35 +1142,50 @@ document.addEventListener('visibilitychange',function(){if(!document.hidden&&upd
 setTimeout(checkUpdate,4000);setInterval(checkUpdate,5*60000);document.addEventListener('visibilitychange',function(){if(!document.hidden)checkUpdate()});
 if('serviceWorker' in navigator&&location.protocol!=='file:'){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}
 /* ================= Sync Handy ↔ Laptop (privates GitHub-Gist) ================= */
+/* ================= Konto und Sync (Supabase, EU Frankfurt) ================= */
+var SB_URL='https://qmbkrqsindnyvqjamsvr.supabase.co',SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFtYmtycXNpbmRueXZxamFtc3ZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI5MjkyNTcsImV4cCI6MjEwODUwNTI1N30.FkQVta2pJioXt4bjdKwhNl06FVQVAgS8Bls5JRfwVJU';
+function authSave(){try{localStorage.setItem(AUTHKEY,JSON.stringify(AUTH))}catch(e){}}
 function sySave(){try{localStorage.setItem(SYNCKEY,JSON.stringify(SY))}catch(e){}}
-var GHAPI='https://api.github.com',SYDESC='Studium-App Sync (nicht löschen)',syBusy=false,syTimer=null;
-function gh(path,opt){opt=opt||{};opt.headers={'Authorization':'token '+SY.token,'Accept':'application/vnd.github+json','Content-Type':'application/json'};return fetch(GHAPI+path,opt).then(function(r){if(!r.ok){var e=new Error('GitHub '+r.status);e.status=r.status;throw e}return r.status===204?null:r.json()})}
-function isObj(x){return x&&typeof x==='object'&&!Array.isArray(x)}
-function mergeState(a,b){if(a===undefined)return b;if(b===undefined)return a;
-  if(isObj(a)&&isObj(b)){if(typeof a.t==='number'&&typeof b.t==='number')return a.t>=b.t?a:b;var o={};Object.keys(a).concat(Object.keys(b)).forEach(function(k){o[k]=mergeState(a[k],b[k])});return o}
-  if(Array.isArray(a)&&Array.isArray(b)){var seen={},out=[];a.concat(b).forEach(function(x){var k=JSON.stringify(x);if(!seen[k]){seen[k]=1;out.push(x)}});return out}
-  if(typeof a==='number'&&typeof b==='number')return Math.max(a,b);if(typeof a==='boolean'&&typeof b==='boolean')return a||b;return a}
-function applyRemote(R){S=R;['done','tasks','cards','diag','plans','quiz','rules','todos','days','haeppchen','kr','ui','read','sym','nach','mast'].forEach(function(k){S[k]=S[k]||{}});S.xp=S.xp||0;
+function loggedIn(){return !!(AUTH.access_token&&AUTH.user)}
+function sbFetch(path,opt,noAuth){opt=opt||{};opt.headers=Object.assign({'apikey':SB_KEY,'Content-Type':'application/json'},opt.headers||{});if(!noAuth&&AUTH.access_token)opt.headers['Authorization']='Bearer '+AUTH.access_token;
+  return fetch(SB_URL+path,opt).then(function(r){return r.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null}catch(e){}if(!r.ok){var e=new Error((j&&(j.msg||j.message||j.error_description||j.error))||('Fehler '+r.status));e.status=r.status;throw e}return j})})}
+function authRefresh(){if(!AUTH.refresh_token)return Promise.reject(new Error('nicht angemeldet'));
+  return sbFetch('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:JSON.stringify({refresh_token:AUTH.refresh_token})},true).then(function(j){AUTH={access_token:j.access_token,refresh_token:j.refresh_token,exp:(j.expires_at||0)*1000,user:j.user};authSave()})}
+function authReady(){if(!loggedIn())return Promise.reject(new Error('nicht angemeldet'));if(AUTH.exp&&Date.now()>AUTH.exp-60000)return authRefresh();return Promise.resolve()}
+function login(email,pw){return sbFetch('/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email:email,password:pw})},true).then(function(j){AUTH={access_token:j.access_token,refresh_token:j.refresh_token,exp:(j.expires_at||0)*1000,user:j.user};authSave()})}
+function logout(){var t=AUTH.access_token;AUTH={};authSave();SY={};sySave();if(t)sbFetch('/auth/v1/logout',{method:'POST',headers:{'Authorization':'Bearer '+t}},true).catch(function(){})}
+function recover(email){return sbFetch('/auth/v1/recover',{method:'POST',body:JSON.stringify({email:email})},true)}
+function setPassword(pw){return authReady().then(function(){return sbFetch('/auth/v1/user',{method:'PUT',body:JSON.stringify({password:pw})})})}
+/* Rückkehr vom „Passwort vergessen“-Link: Supabase hängt die Sitzung an die Adresse an */
+(function(){var h=location.hash||'';if(/access_token=/.test(h)&&/type=recovery|refresh_token=/.test(h)){var q={};h.replace(/^#\/?/,'').split('&').forEach(function(kv){var i=kv.indexOf('=');if(i>0)q[decodeURIComponent(kv.slice(0,i))]=decodeURIComponent(kv.slice(i+1))});
+  if(q.access_token){AUTH={access_token:q.access_token,refresh_token:q.refresh_token,exp:Date.now()+(+q.expires_in||3600)*1000,user:AUTH.user||{email:''},recovery:q.type==='recovery'};authSave();history.replaceState(null,'',location.pathname+'#/studium');
+    sbFetch('/auth/v1/user').then(function(u){AUTH.user=u;authSave();rerender()}).catch(function(){})}}})();
+/* Zusammenführen je Schlüssel: der neuere Zeitstempel gewinnt */
+function tsOf(T,sec,k){return (T&&T[sec]&&T[sec][k])||0}
+function mergeByTs(L,R){var out={},LT=L._ts||{},RT=R._ts||{},TS={};
+  SECTIONS.forEach(function(sec){var a=L[sec]||{},b=R[sec]||{},o={},t={};Object.keys(a).concat(Object.keys(b)).forEach(function(k){if(k in o)return;var ta=tsOf(LT,sec,k),tb=tsOf(RT,sec,k);var useB=(k in b)&&(!(k in a)||tb>ta);if(useB){if(b[k]!==undefined)o[k]=b[k]}else if(a[k]!==undefined)o[k]=a[k];t[k]=Math.max(ta,tb)});out[sec]=o;TS[sec]=t});
+  var sa=LT._s||{},sb=RT._s||{},st={};SCALARS.forEach(function(k){var ta=sa[k]||0,tb=sb[k]||0;out[k]=(k in R)&&(!(k in L)||tb>ta)?R[k]:L[k];st[k]=Math.max(ta,tb)});TS._s=st;
+  out._ts=TS;out._v=2;out._mod=Math.max(L._mod||0,R._mod||0);return out}
+function applyRemote(R){S=R;SECTIONS.forEach(function(k){S[k]=S[k]||{}});S.xp=S.xp||0;S._ts=S._ts||{};snapInit();
   try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(S.theme)document.documentElement.setAttribute('data-theme',S.theme);if(layer.hidden)rerender()}
-function syFind(){if(SY.gist)return Promise.resolve(SY.gist);
-  return gh('/gists?per_page=100').then(function(list){var g=(list||[]).find(function(x){return x.description===SYDESC});if(g){SY.gist=g.id;sySave();return g.id}
-    return gh('/gists',{method:'POST',body:JSON.stringify({description:SYDESC,public:false,files:{'studium.json':{content:JSON.stringify(S)}}})}).then(function(n){SY.gist=n.id;SY.base=S._mod||0;sySave();return n.id})})}
-function syncNow(quiet){if(!SY.token||syBusy||!navigator.onLine)return Promise.resolve();syBusy=true;
-  return syFind().then(function(id){return gh('/gists/'+id).then(function(g){var f=g.files&&g.files['studium.json'];var p=f&&f.truncated?fetch(f.raw_url).then(function(r){return r.json()}):Promise.resolve(f?JSON.parse(f.content||'{}'):{});return p})
-    .then(function(R){var base=SY.base||0,lm=S._mod||0,rm=(R&&R._mod)||0,lc=lm>base,rc=rm>base,push=false;
-      if(rc&&!lc){applyRemote(R);if(!quiet)toast('Stand vom anderen Gerät übernommen.')}
-      else if(lc&&!rc)push=true;
-      else if(lc&&rc){var M=mergeState(S,R);M._mod=Date.now();applyRemote(M);push=true;if(!quiet)toast('Beide Geräte zusammengeführt.')}
-      SY.base=S._mod||0;SY.last=Date.now();SY.err=null;sySave();
-      if(push)return gh('/gists/'+id,{method:'PATCH',body:JSON.stringify({files:{'studium.json':{content:JSON.stringify(S)}}})}).then(function(){SY.base=S._mod||0;SY.last=Date.now();sySave()})})})
-  .catch(function(e){SY.err=(e&&e.status===401)?'Schlüssel ungültig oder abgelaufen':(e&&e.status===404)?'Sync-Datei nicht gefunden':'kein Internet oder GitHub nicht erreichbar';if(e&&e.status===404){SY.gist=null}sySave()})
+var syBusy=false,syTimer=null;
+function syncNow(quiet){if(!loggedIn()||syBusy||!navigator.onLine)return Promise.resolve();syBusy=true;var uid=AUTH.user&&AUTH.user.id;
+  return authReady().then(function(){return sbFetch('/rest/v1/progress?select=data,updated_at&user_id=eq.'+uid)}).then(function(rows){
+      var R=rows&&rows[0]&&rows[0].data,push=false,fp=JSON.stringify(S._ts||{});stamp();
+      if(R&&R._v===2){var M=mergeByTs(S,R);var changedLocal=JSON.stringify(M)!==JSON.stringify(S);var changedRemote=JSON.stringify(M)!==JSON.stringify(R);if(changedLocal){applyRemote(M);if(!quiet)toast('Stand vom anderen Gerät übernommen.')}push=changedRemote}
+      else if(R&&!R._v){var M2=mergeByTs(S,Object.assign({},R,{_ts:{}}));applyRemote(M2);push=true}
+      else push=true;
+      SY.last=Date.now();SY.err=null;sySave();
+      if(push)return sbFetch('/rest/v1/progress',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({user_id:uid,data:S,updated_at:new Date().toISOString()})})})
+  .catch(function(e){SY.err=(e&&e.status===401)?'Anmeldung abgelaufen, bitte neu anmelden':(e&&/Failed to fetch|NetworkError/.test(String(e.message)))?'kein Internet oder Server nicht erreichbar':String(e.message||e);if(e&&e.status===401){AUTH={};authSave()}sySave()})
   .then(function(){syBusy=false;var el=$('#systat');if(el)el.innerHTML=syStatus();checkHandoff()})}
-function syLater(){if(!SY.token)return;clearTimeout(syTimer);syTimer=setTimeout(function(){syncNow(true)},4000)}
-function syStatus(){if(!SY.token)return 'Nicht verbunden';if(SY.err)return '<span class="badc">Problem: '+esc(SY.err)+'</span>';if(!SY.last)return 'Verbunden, noch nicht synchronisiert';var d=new Date(SY.last);return '<span class="okc">Verbunden</span> · zuletzt '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' Uhr'}
-function syncCard(){if(SY.token)return '<div class="card"><b>Handy ↔ Laptop synchronisieren</b><p class="small" id="systat" style="margin:6px 0">'+syStatus()+'</p><p class="small muted">Läuft automatisch: beim Öffnen, alle 2 Minuten und kurz nach jeder Änderung.</p><div class="btns"><button class="btn sm" data-act="syncnow">Jetzt synchronisieren</button><button class="btn sm ghost" data-act="syncoff">Auf diesem Gerät trennen</button></div></div>';
-  return '<div class="card"><b>Handy ↔ Laptop synchronisieren</b><p class="small" style="margin:6px 0">Einmal pro Gerät einrichten, dann gleicht sich alles automatisch ab. Dein Fortschritt liegt dafür in einer privaten Datei in deinem GitHub-Konto.</p>'+
-   '<ol class="small" style="padding-left:1.2em;margin:6px 0"><li>Auf <a href="https://github.com/settings/tokens/new?scopes=gist&description=Studium-App%20Sync" target="_blank" rel="noopener">github.com → Token erstellen</a> gehen (Link füllt alles vor).</li><li>Bei „Expiration“ <b>No expiration</b> wählen. Nur das Häkchen <b>gist</b> ist gesetzt.</li><li>Unten <b>Generate token</b> drücken und den Schlüssel (fängt mit ghp_ an) kopieren.</li><li>Hier einfügen und verbinden. Auf dem zweiten Gerät <b>denselben</b> Schlüssel einfügen.</li></ol>'+
-   '<input class="search" id="sytok" type="password" placeholder="ghp_…" autocomplete="off" spellcheck="false"><div class="btns"><button class="btn sm" data-act="syncon">Verbinden</button></div><p class="small muted">Tipp: Speicher den Schlüssel kurz in einer Notiz, um ihn aufs zweite Gerät zu bringen, und lösch die Notiz danach.</p></div>'}
+function syLater(){if(!loggedIn())return;clearTimeout(syTimer);syTimer=setTimeout(function(){syncNow(true)},4000)}
+function syStatus(){if(!loggedIn())return 'Nicht angemeldet';if(SY.err)return '<span class="badc">Problem: '+esc(SY.err)+'</span>';if(!SY.last)return 'Angemeldet, noch nicht synchronisiert';var d=new Date(SY.last);return '<span class="okc">Synchron</span> · zuletzt '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' Uhr'}
+function syncCard(){var u=AUTH.user||{};return '<div class="card"><b>Konto und Geräte-Sync</b><p class="small" style="margin:6px 0">Angemeldet als <b>'+esc(u.email||'')+'</b></p><p class="small" id="systat" style="margin:6px 0">'+syStatus()+'</p><p class="small muted">Fortschritt, Pläne und Einstellungen gleichen sich automatisch ab: beim Öffnen, alle 2 Minuten und kurz nach jeder Änderung. Ohne Internet läuft alles weiter und wird später nachgetragen.</p><div class="btns"><button class="btn sm" data-act="syncnow">Jetzt synchronisieren</button><button class="btn sm ghost" data-act="pwchange">Passwort ändern</button><button class="btn sm ghost" data-act="logout">Abmelden</button></div></div>'}
+function vLogin(){var rec=AUTH.recovery;return '<div class="m-studium"><div class="band"><div class="wrap"><h1>Studium</h1><p style="opacity:.9">Anmelden, dann geht es weiter.</p></div></div><div class="wrap"><section class="sec"><div class="card" style="max-width:420px;margin:0 auto">'+
+  (rec?'<h2>Neues Passwort setzen</h2><p class="small muted">Mindestens 12 Zeichen mit Groß- und Kleinbuchstaben, Zahl und Sonderzeichen.</p><input class="search" id="pw1" type="password" placeholder="Neues Passwort" autocomplete="new-password"><input class="search" id="pw2" type="password" placeholder="Noch einmal" autocomplete="new-password" style="margin-top:8px"><div class="btns" style="margin-top:10px"><button class="btn" data-act="pwset">Speichern</button></div>'
+  :'<h2>Anmelden</h2><input class="search" id="lmail" type="email" placeholder="E-Mail" autocomplete="username" inputmode="email"><input class="search" id="lpw" type="password" placeholder="Passwort" autocomplete="current-password" style="margin-top:8px"><div class="btns" style="margin-top:10px"><button class="btn" data-act="login">Anmelden</button><button class="btn sm ghost" data-act="forgot">Passwort vergessen</button></div><p class="small muted" style="margin-top:10px">Diese App ist privat. Es gibt keine Registrierung.</p>')+
+  '<p class="small badc" id="lerr" style="margin-top:8px"></p></div></section></div></div>'}
 setTimeout(function(){syncNow(true)},1500);setInterval(function(){if(!document.hidden)syncNow(true)},120000);
 document.addEventListener('visibilitychange',function(){syncNow(true)});window.addEventListener('online',function(){syncNow(true)});
 window.__dbg={S:function(){return S},dynItems:dynItems,dynEval:dynEval,symGaps:symGaps,symKeys:symKeys,D:D,weeklyOn:weeklyOn,pd:pd};
