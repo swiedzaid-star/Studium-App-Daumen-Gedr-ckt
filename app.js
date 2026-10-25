@@ -1221,8 +1221,9 @@ function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;D.mods.forEa
    :'<h2>Willkommen zurück</h2><p class="small muted">Melde dich an, dann geht es da weiter, wo du aufgehört hast.</p>'+
      '<label class="lg-f"><input id="lmail" type="email" placeholder=" " autocomplete="username" inputmode="email" spellcheck="false"><span>E-Mail</span></label>'+
      '<label class="lg-f"><input id="lpw" type="password" placeholder=" " autocomplete="current-password"><span>Passwort</span><button type="button" class="lg-eye" data-act="eye" aria-label="Passwort anzeigen">'+IC.eye+'</button></label>'+
-     '<button class="btn lg-go" data-act="login">Anmelden '+IC.chev+'</button><button class="lg-link" data-act="forgot">Passwort vergessen?</button>')+
+     '<p class="lg-caps" id="lcaps">Feststelltaste ist aktiv.</p><button class="btn lg-go" data-act="login">Anmelden '+IC.chev+'</button><button class="lg-link" data-act="forgot">Passwort vergessen?</button>')+
   '<p class="small badc" id="lerr" role="alert"></p><p class="lg-foot">Privat. Keine Registrierung. Daten in der EU. <button class="lg-link" data-act="privacy">Datenschutz</button></p></section></div></div>'}
+document.addEventListener('keyup',function(e){var c=document.getElementById('lcaps');if(c&&e.getModifierState&&document.activeElement&&document.activeElement.id==='lpw')c.classList.toggle('on',e.getModifierState('CapsLock'))});
 setTimeout(function(){syncNow(true)},1500);setInterval(function(){if(!document.hidden)syncNow(true)},120000);
 document.addEventListener('visibilitychange',function(){syncNow(true)});window.addEventListener('online',function(){syncNow(true)});
 window.__dbg={S:function(){return S},dynItems:dynItems,dynEval:dynEval,symGaps:symGaps,symKeys:symKeys,D:D,weeklyOn:weeklyOn,pd:pd};
