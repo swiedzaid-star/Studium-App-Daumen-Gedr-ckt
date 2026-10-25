@@ -795,3 +795,11 @@ figure.anim[data-st=step] .g-step,figure.anim[data-st=play] .g-play,figure.anim[
 .anim-tempo .chipbtn{min-height:36px;min-width:44px;padding:4px 10px;border-radius:99px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 .88rem var(--f-body);cursor:pointer}
 .anim-tempo .chipbtn.on{background:var(--acc);border-color:var(--acc);color:var(--surface)}
 @media (max-width:420px){.anim-g [data-aa=play]{margin-left:0;flex-basis:100%}}
+
+/* ===== Konzentrationsmodus (Wunsch des Inhabers 25.10.): eine Farbe, kein Schmuck ===== */
+body.focus{background:var(--bg)}
+body.focus::after,body.focus .bgart,body.focus .sqh{display:none}
+body.focus .band::before,body.focus .band::after{display:none}
+body.focus .band{background:var(--band)}
+body.focus main .sec>h2,body.focus main .top h1{text-shadow:none}
+body.focus .card,body.focus .lec,body.focus .story .sp{backdrop-filter:none;-webkit-backdrop-filter:none}

@@ -178,6 +178,8 @@ function go(h){location.hash=h}
 function route(keep){try{ensureFixPlans()}catch(e){}
   var y=window.scrollY,h=(location.hash||'#/heute').slice(2),p=h.split('/');
   var v=p[0]||'heute',html='';
+  /* Konzentrationsmodus: beim Lernen (einzelne Vorlesung, Karteikarten, Symbole) nur eine ruhige Farbe im Hintergrund, keine Szene, kein Eichhörnchen */
+  var focus=(v==='fach'&&MOD[p[1]]&&((p[2]==='vorlesungen'&&p[3])||p[2]==='karten'))||v==='symbole';document.body.classList.toggle('focus',!!focus);
   document.body.setAttribute('data-page',v==='fach'&&MOD[p[1]]?'fach':v);['mathe','stat','bsk','bure','gdm','mech','spa','studium'].forEach(function(k){document.body.classList.remove('pg-'+k)});if(v==='fach'&&MOD[p[1]])document.body.classList.add('pg-'+p[1]);if(v==='studium'||v==='symbole')document.body.classList.add('pg-studium');
   try{
     document.body.classList.remove('pg-login');if(!loggedIn()||AUTH.recovery){main.innerHTML=vLogin();document.body.setAttribute('data-page','login');document.body.classList.add('pg-studium','pg-login');window.scrollTo(0,0);return}
