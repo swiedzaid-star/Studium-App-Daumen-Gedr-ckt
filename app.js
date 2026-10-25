@@ -1156,10 +1156,14 @@ function login(email,pw){return sbFetch('/auth/v1/token?grant_type=password',{me
 function logout(){var t=AUTH.access_token;AUTH={};authSave();SY={};sySave();if(t)sbFetch('/auth/v1/logout',{method:'POST',headers:{'Authorization':'Bearer '+t}},true).catch(function(){})}
 function recover(email){return sbFetch('/auth/v1/recover',{method:'POST',body:JSON.stringify({email:email})},true)}
 function setPassword(pw){return authReady().then(function(){return sbFetch('/auth/v1/user',{method:'PUT',body:JSON.stringify({password:pw})})})}
-/* Rückkehr vom „Passwort vergessen“-Link: Supabase hängt die Sitzung an die Adresse an */
-(function(){var h=location.hash||'';if(/access_token=/.test(h)&&/type=recovery|refresh_token=/.test(h)){var q={};h.replace(/^#\/?/,'').split('&').forEach(function(kv){var i=kv.indexOf('=');if(i>0)q[decodeURIComponent(kv.slice(0,i))]=decodeURIComponent(kv.slice(i+1))});
-  if(q.access_token){AUTH={access_token:q.access_token,refresh_token:q.refresh_token,exp:Date.now()+(+q.expires_in||3600)*1000,user:AUTH.user||{email:''},recovery:q.type==='recovery'};authSave();history.replaceState(null,'',location.pathname+'#/studium');
-    sbFetch('/auth/v1/user').then(function(u){AUTH.user=u;authSave();rerender()}).catch(function(){})}}})();
+/* Rückkehr vom „Passwort vergessen“-Link. Zwei Formen: #token_hash=…&type=recovery (sicher gegen Mail-Scanner, die App bestätigt den
+   Link selbst) oder #access_token=…&type=recovery (Standardvorlage von Supabase). */
+(function(){var h=location.hash||'';if(!/type=recovery|token_hash=|access_token=/.test(h))return;var q={};h.replace(/^#\/?/,'').split('&').forEach(function(kv){var i=kv.indexOf('=');if(i>0)q[decodeURIComponent(kv.slice(0,i))]=decodeURIComponent(kv.slice(i+1))});
+  history.replaceState(null,'',location.pathname+'#/studium');
+  function take(j){AUTH={access_token:j.access_token,refresh_token:j.refresh_token,exp:j.expires_at?j.expires_at*1000:Date.now()+(+j.expires_in||3600)*1000,user:j.user||AUTH.user||{email:''},recovery:true};authSave();if(!j.user)sbFetch('/auth/v1/user').then(function(u){AUTH.user=u;authSave();rerender()}).catch(function(){});rerender()}
+  if(q.token_hash){sbFetch('/auth/v1/verify',{method:'POST',body:JSON.stringify({type:q.type||'recovery',token_hash:q.token_hash})},true).then(take).catch(function(e){setTimeout(function(){toast('Der Link ist ungültig oder abgelaufen. Bitte neu anfordern.')},800)})}
+  else if(q.access_token)take({access_token:q.access_token,refresh_token:q.refresh_token,expires_in:q.expires_in});
+  else if(q.error_description)setTimeout(function(){toast('Link ungültig: '+q.error_description.replace(/\+/g,' '))},800)})();
 /* Zusammenführen je Schlüssel: der neuere Zeitstempel gewinnt */
 function tsOf(T,sec,k){return (T&&T[sec]&&T[sec][k])||0}
 function mergeByTs(L,R){var out={},LT=L._ts||{},RT=R._ts||{},TS={};
