@@ -10,7 +10,8 @@ self.addEventListener('fetch',function(e){var req=e.request;if(req.method!=='GET
   if(u.origin!==location.origin)return;
   if(HASHED.test(u.pathname)){ /* Inhalt-Dateien mit Hash: einmal laden, dann immer aus dem Speicher */
     e.respondWith(caches.match(req).then(function(hit){return hit||fetch(req).then(function(res){if(res.ok){var cp=res.clone();caches.open(CACHE).then(function(c){c.put(req,cp)})}return res})}));return}
-  e.respondWith(fetch(req).then(function(res){if(res.ok){var cp=res.clone();caches.open(CACHE).then(function(c){c.put(req,cp)})}return res})
+  var noStore=req.cache==='no-store'||u.searchParams.has('t'); /* Update-Prüfung (index.html?t=…): nie speichern, sonst wächst der Speicher endlos */
+  e.respondWith(fetch(req).then(function(res){if(res.ok&&!noStore){var cp=res.clone();caches.open(CACHE).then(function(c){c.put(req,cp)})}return res})
     .catch(function(){return caches.match(req,{ignoreSearch:true}).then(function(hit){return hit||caches.match('index.html')})}));
 });
 self.addEventListener('message',function(e){var keep=e.data&&e.data.keep;if(!keep)return; /* alte Inhalt-Dateien aufräumen */

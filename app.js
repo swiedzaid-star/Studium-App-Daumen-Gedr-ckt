@@ -158,7 +158,7 @@ setTimeout(function(){if(!(window.MathJax&&MathJax.typesetPromise)){document.bod
 function confetti(){if(reduceMotion)return;var box=document.createElement('div');box.className='confetti';var cols=['#2448c9','#0b7480','#e2ae62','#6b3fb0','#b0325a','#2f6b1f','#c2410c'];
   for(var i=0;i<36;i++){var s=document.createElement('i');s.style.left=(Math.random()*100)+'%';s.style.background=cols[i%cols.length];s.style.animationDelay=(Math.random()*.25)+'s';s.style.transform='rotate('+(Math.random()*360)+'deg)';box.appendChild(s)}
   document.body.appendChild(box);setTimeout(function(){box.remove()},1600)}
-function toast(msg){var t=document.createElement('div');t.className='toast';t.innerHTML=msg;document.body.appendChild(t);setTimeout(function(){t.classList.add('out')},1700);setTimeout(function(){t.remove()},2200)}
+function toast(msg){var t=document.createElement('div');t.className='toast';t.textContent=String(msg);document.body.appendChild(t);setTimeout(function(){t.classList.add('out')},1700);setTimeout(function(){t.remove()},2200)}
 
 /* ================= Router ================= */
 var UI={calY:TODAY.getFullYear(),calM:TODAY.getMonth(),calSel:ymd(TODAY),calOff:S.ui.calOff||{},calWeekly:!!S.ui.calWeekly,calGroups:S.ui.calGroups!==false,calView:S.ui.calView||'woche'};
@@ -173,7 +173,7 @@ function route(keep){try{ensureFixPlans()}catch(e){}
   var v=p[0]||'heute',html='';
   document.body.setAttribute('data-page',v==='fach'&&MOD[p[1]]?'fach':v);['mathe','stat','bsk','bure','gdm','mech','spa','studium'].forEach(function(k){document.body.classList.remove('pg-'+k)});if(v==='fach'&&MOD[p[1]])document.body.classList.add('pg-'+p[1]);if(v==='studium'||v==='symbole')document.body.classList.add('pg-studium');
   try{
-    if(!loggedIn()){main.innerHTML=vLogin();document.body.setAttribute('data-page','studium');document.body.classList.add('pg-studium');window.scrollTo(0,0);return}
+    if(!loggedIn()||AUTH.recovery){main.innerHTML=vLogin();document.body.setAttribute('data-page','studium');document.body.classList.add('pg-studium');window.scrollTo(0,0);return}
     if(v==='heute')html=vHeute();
     else if(v==='kalender')html=vKalender();
     else if(v==='fristen')html=vFristen(p[1]||'bald');
@@ -1106,7 +1106,7 @@ document.addEventListener('click',function(e){
   if(a==='sess'){var p=S.plans[t.getAttribute('data-x')],sid=t.getAttribute('data-s');if(p){p.done[sid]=!p.done[sid];if(p.done[sid])activity(10);save();rerender()}return}
   if(a==='kr'){kopfrechnen();return}
   if(a==='login'){var em=($('#lmail').value||'').trim(),pw=$('#lpw').value||'';if(!em||!pw){toast('E-Mail und Passwort eingeben.');return}t.disabled=true;login(em,pw).then(function(){toast('Willkommen!');rerender();syncNow(false)}).catch(function(e){t.disabled=false;var el=$('#lerr');if(el)el.textContent=/invalid/i.test(e.message)?'E-Mail oder Passwort stimmt nicht.':'Anmeldung fehlgeschlagen: '+e.message});return}
-  if(a==='forgot'){var em2=($('#lmail').value||'').trim();if(!em2){toast('Erst die E-Mail eintragen.');return}recover(em2).then(function(){toast('Falls ein Konto existiert, kommt gleich eine E-Mail.')}).catch(function(e){toast('Fehler: '+e.message)});return}
+  if(a==='forgot'){var em2=($('#lmail').value||'').trim();if(!em2){toast('Erst die E-Mail eintragen.');return}try{localStorage.setItem('studium-recover',em2)}catch(e){}recover(em2).then(function(){toast('Falls ein Konto existiert, kommt gleich eine E-Mail.')}).catch(function(e){toast('Fehler: '+e.message)});return}
   if(a==='pwset'||a==='pwchange'){var p1=a==='pwset'?($('#pw1').value||''):prompt('Neues Passwort (mind. 12 Zeichen, Groß/Klein, Zahl, Sonderzeichen):'),p2=a==='pwset'?($('#pw2').value||''):p1;if(p1==null)return;if(p1.length<12){toast('Mindestens 12 Zeichen.');return}if(p1!==p2){toast('Die Passwörter stimmen nicht überein.');return}setPassword(p1).then(function(){AUTH.recovery=false;authSave();toast('Passwort gespeichert.');rerender()}).catch(function(e){toast('Fehler: '+e.message)});return}
   if(a==='syncnow'){syncNow(false).then(function(){toast(SY.err?'Problem: '+SY.err:'Synchronisiert.')});return}
   if(a==='logout'){logout();toast('Abgemeldet.');rerender();return}
@@ -1149,40 +1149,57 @@ function sySave(){try{localStorage.setItem(SYNCKEY,JSON.stringify(SY))}catch(e){
 function loggedIn(){return !!(AUTH.access_token&&AUTH.user)}
 function sbFetch(path,opt,noAuth){opt=opt||{};opt.headers=Object.assign({'apikey':SB_KEY,'Content-Type':'application/json'},opt.headers||{});if(!noAuth&&AUTH.access_token)opt.headers['Authorization']='Bearer '+AUTH.access_token;
   return fetch(SB_URL+path,opt).then(function(r){return r.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null}catch(e){}if(!r.ok){var e=new Error((j&&(j.msg||j.message||j.error_description||j.error))||('Fehler '+r.status));e.status=r.status;throw e}return j})})}
-function authRefresh(){if(!AUTH.refresh_token)return Promise.reject(new Error('nicht angemeldet'));
-  return sbFetch('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:JSON.stringify({refresh_token:AUTH.refresh_token})},true).then(function(j){AUTH={access_token:j.access_token,refresh_token:j.refresh_token,exp:(j.expires_at||0)*1000,user:j.user};authSave()})}
-function authReady(){if(!loggedIn())return Promise.reject(new Error('nicht angemeldet'));if(AUTH.exp&&Date.now()>AUTH.exp-60000)return authRefresh();return Promise.resolve()}
+/* Anmeldung aus localStorage neu lesen: ein anderer Tab kann den Refresh-Token schon erneuert haben (Rotation). */
+function authReload(){try{var a=JSON.parse(localStorage.getItem(AUTHKEY)||'{}');if(a&&a.access_token)AUTH=a}catch(e){}}
+window.addEventListener('storage',function(ev){if(ev.key===AUTHKEY){authReload();if(!loggedIn()){AUTH={};rerender()}}});
+function authDrop(msg){AUTH={};authSave();SY.err=msg||'Anmeldung abgelaufen, bitte neu anmelden';sySave();if(layer.hidden)rerender()}
+var refreshing=null;
+function authRefresh(){authReload();if(!AUTH.refresh_token)return Promise.reject(new Error('nicht angemeldet'));if(refreshing)return refreshing;
+  refreshing=sbFetch('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:JSON.stringify({refresh_token:AUTH.refresh_token})},true).then(function(j){AUTH={access_token:j.access_token,refresh_token:j.refresh_token,exp:(j.expires_at||0)*1000,user:j.user,recovery:AUTH.recovery};authSave()})
+    .catch(function(e){ /* 400/401/403 = Refresh-Token ungültig oder abgelaufen: sauber abmelden statt endlos scheitern */
+      if(e&&e.status&&e.status<500&&e.status!==429)authDrop();throw e})
+    .then(function(v){refreshing=null;return v},function(e){refreshing=null;throw e});
+  return refreshing}
+function authReady(){authReload();if(!loggedIn())return Promise.reject(new Error('nicht angemeldet'));if(AUTH.exp&&Date.now()>AUTH.exp-60000)return authRefresh();return Promise.resolve()}
+/* Anfrage mit Anmeldung: bei 401 einmal erneuern und wiederholen, erst dann abmelden */
+function sbAuthed(path,opt){return sbFetch(path,opt).catch(function(e){if(e&&e.status===401&&AUTH.refresh_token)return authRefresh().then(function(){return sbFetch(path,opt)});throw e})}
 function login(email,pw){return sbFetch('/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email:email,password:pw})},true).then(function(j){AUTH={access_token:j.access_token,refresh_token:j.refresh_token,exp:(j.expires_at||0)*1000,user:j.user};authSave()})}
 function logout(){var t=AUTH.access_token;AUTH={};authSave();SY={};sySave();if(t)sbFetch('/auth/v1/logout',{method:'POST',headers:{'Authorization':'Bearer '+t}},true).catch(function(){})}
 function appUrl(){return location.origin+location.pathname.replace(/index\.html$/,'')}
 function recover(email){return sbFetch('/auth/v1/recover?redirect_to='+encodeURIComponent(appUrl()),{method:'POST',body:JSON.stringify({email:email})},true)}
-function setPassword(pw){return authReady().then(function(){return sbFetch('/auth/v1/user',{method:'PUT',body:JSON.stringify({password:pw})})})}
+function setPassword(pw){return authReady().then(function(){return sbAuthed('/auth/v1/user',{method:'PUT',body:JSON.stringify({password:pw})})})}
 /* Rückkehr vom „Passwort vergessen“-Link. Zwei Formen: #token_hash=…&type=recovery (sicher gegen Mail-Scanner, die App bestätigt den
    Link selbst) oder #access_token=…&type=recovery (Standardvorlage von Supabase). */
-(function(){var h=location.hash||'';if(!/type=recovery|token_hash=|access_token=/.test(h))return;var q={};h.replace(/^#\/?/,'').split('&').forEach(function(kv){var i=kv.indexOf('=');if(i>0)q[decodeURIComponent(kv.slice(0,i))]=decodeURIComponent(kv.slice(i+1))});
-  history.replaceState(null,'',location.pathname+'#/studium');
-  function take(j){AUTH={access_token:j.access_token,refresh_token:j.refresh_token,exp:j.expires_at?j.expires_at*1000:Date.now()+(+j.expires_in||3600)*1000,user:j.user||AUTH.user||{email:''},recovery:true};authSave();if(!j.user)sbFetch('/auth/v1/user').then(function(u){AUTH.user=u;authSave();rerender()}).catch(function(){});rerender()}
-  if(q.token_hash){sbFetch('/auth/v1/verify',{method:'POST',body:JSON.stringify({type:q.type||'recovery',token_hash:q.token_hash})},true).then(take).catch(function(e){setTimeout(function(){toast('Der Link ist ungültig oder abgelaufen. Bitte neu anfordern.')},800)})}
-  else if(q.access_token)take({access_token:q.access_token,refresh_token:q.refresh_token,expires_in:q.expires_in});
-  else if(q.error_description)setTimeout(function(){toast('Link ungültig: '+q.error_description.replace(/\+/g,' '))},800)})();
+(function(){var h=location.hash||'';if(!/type=recovery|token_hash=|access_token=|error_description=/.test(h))return;var q={};h.replace(/^#\/?/,'').split('&').forEach(function(kv){var i=kv.indexOf('=');if(i>0){try{q[decodeURIComponent(kv.slice(0,i))]=decodeURIComponent(kv.slice(i+1))}catch(e){}}});
+  history.replaceState(null,'',location.pathname+'#/studium'); /* Token sofort aus der Adresszeile (Verlauf, Screenshots) */
+  var bad=function(){setTimeout(function(){toast('Der Link ist ungültig oder abgelaufen. Bitte neu anfordern.')},800)};
+  var expect='';try{expect=localStorage.getItem('studium-recover')||''}catch(e){}
+  function take(j){var u=j.user;if(!u||!u.email||(expect&&u.email.toLowerCase()!==expect.toLowerCase()))return bad();
+    AUTH={access_token:j.access_token,refresh_token:j.refresh_token,exp:j.expires_at?j.expires_at*1000:Date.now()+(+j.expires_in||3600)*1000,user:u,recovery:true};authSave();try{localStorage.removeItem('studium-recover')}catch(e){}rerender()}
+  if(q.type!=='recovery'&&!q.error_description)return bad();
+  if(q.token_hash){ /* sicherer Weg: der Server bestätigt den Link und liefert Nutzer + Sitzung */
+    sbFetch('/auth/v1/verify',{method:'POST',body:JSON.stringify({type:'recovery',token_hash:q.token_hash})},true).then(take).catch(bad)}
+  else if(q.access_token){ /* Standardvorlage: Token nur annehmen, wenn der Server ihn als Nutzer dieses Projekts bestätigt */
+    sbFetch('/auth/v1/user',{headers:{'Authorization':'Bearer '+q.access_token}},true).then(function(u){take({access_token:q.access_token,refresh_token:q.refresh_token,expires_in:q.expires_in,user:u})}).catch(bad)}
+  else if(q.error_description)bad()})();
 /* Zusammenführen je Schlüssel: der neuere Zeitstempel gewinnt */
 function tsOf(T,sec,k){return (T&&T[sec]&&T[sec][k])||0}
 function mergeByTs(L,R){var out={},LT=L._ts||{},RT=R._ts||{},TS={};
-  SECTIONS.forEach(function(sec){var a=L[sec]||{},b=R[sec]||{},o={},t={};Object.keys(a).concat(Object.keys(b)).forEach(function(k){if(k in o)return;var ta=tsOf(LT,sec,k),tb=tsOf(RT,sec,k);var useB=(k in b)&&(!(k in a)||tb>ta);if(useB){if(b[k]!==undefined)o[k]=b[k]}else if(a[k]!==undefined)o[k]=a[k];t[k]=Math.max(ta,tb)});out[sec]=o;TS[sec]=t});
+  SECTIONS.forEach(function(sec){var a=L[sec]||{},b=R[sec]||{},o={},t={};Object.keys(a).concat(Object.keys(b)).forEach(function(k){if(k in o)return;var ta=tsOf(LT,sec,k),tb=tsOf(RT,sec,k);var useB=(k in b)&&(tb>ta||(!(k in a)&&ta===0));if(useB){if(b[k]!==undefined)o[k]=b[k]}else if(a[k]!==undefined)o[k]=a[k];t[k]=Math.max(ta,tb)});out[sec]=o;TS[sec]=t});
   var sa=LT._s||{},sb=RT._s||{},st={};SCALARS.forEach(function(k){var ta=sa[k]||0,tb=sb[k]||0;out[k]=(k in R)&&(!(k in L)||tb>ta)?R[k]:L[k];st[k]=Math.max(ta,tb)});TS._s=st;
   out._ts=TS;out._v=2;out._mod=Math.max(L._mod||0,R._mod||0);return out}
 function applyRemote(R){S=R;SECTIONS.forEach(function(k){S[k]=S[k]||{}});S.xp=S.xp||0;S._ts=S._ts||{};snapInit();
   try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(S.theme)document.documentElement.setAttribute('data-theme',S.theme);if(layer.hidden)rerender()}
 var syBusy=false,syTimer=null;
 function syncNow(quiet){if(!loggedIn()||syBusy||!navigator.onLine)return Promise.resolve();syBusy=true;var uid=AUTH.user&&AUTH.user.id;
-  return authReady().then(function(){return sbFetch('/rest/v1/progress?select=data,updated_at&user_id=eq.'+uid)}).then(function(rows){
+  return authReady().then(function(){return sbAuthed('/rest/v1/progress?select=data,updated_at&user_id=eq.'+uid)}).then(function(rows){
       var R=rows&&rows[0]&&rows[0].data,push=false,fp=JSON.stringify(S._ts||{});stamp();
       if(R&&R._v===2){var M=mergeByTs(S,R);var changedLocal=JSON.stringify(M)!==JSON.stringify(S);var changedRemote=JSON.stringify(M)!==JSON.stringify(R);if(changedLocal){applyRemote(M);if(!quiet)toast('Stand vom anderen Gerät übernommen.')}push=changedRemote}
       else if(R&&!R._v){var M2=mergeByTs(S,Object.assign({},R,{_ts:{}}));applyRemote(M2);push=true}
       else push=true;
       SY.last=Date.now();SY.err=null;sySave();
-      if(push)return sbFetch('/rest/v1/progress',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({user_id:uid,data:S,updated_at:new Date().toISOString()})})})
-  .catch(function(e){SY.err=(e&&e.status===401)?'Anmeldung abgelaufen, bitte neu anmelden':(e&&/Failed to fetch|NetworkError/.test(String(e.message)))?'kein Internet oder Server nicht erreichbar':String(e.message||e);if(e&&e.status===401){AUTH={};authSave()}sySave()})
+      if(push)return sbAuthed('/rest/v1/progress',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({user_id:uid,data:S,updated_at:new Date().toISOString()})})})
+  .catch(function(e){if(!loggedIn()){SY.err=SY.err||'Anmeldung abgelaufen, bitte neu anmelden'}else SY.err=(e&&e.status===401)?'Anmeldung abgelaufen, bitte neu anmelden':(e&&/Failed to fetch|NetworkError/.test(String(e.message)))?'kein Internet oder Server nicht erreichbar':String(e.message||e);if(e&&e.status===401&&loggedIn())authDrop();sySave()})
   .then(function(){syBusy=false;var el=$('#systat');if(el)el.innerHTML=syStatus();checkHandoff()})}
 function syLater(){if(!loggedIn())return;clearTimeout(syTimer);syTimer=setTimeout(function(){syncNow(true)},4000)}
 function syStatus(){if(!loggedIn())return 'Nicht angemeldet';if(SY.err)return '<span class="badc">Problem: '+esc(SY.err)+'</span>';if(!SY.last)return 'Angemeldet, noch nicht synchronisiert';var d=new Date(SY.last);return '<span class="okc">Synchron</span> · zuletzt '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' Uhr'}
