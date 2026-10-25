@@ -150,7 +150,9 @@ var IC={
 function ck(id,label){var on=!!S.done[id];return '<button class="ck'+(on?' on':'')+'" data-act="done" data-id="'+esc(id)+'" aria-pressed="'+on+'" aria-label="'+esc(label||'erledigt')+'">'+IC.check+'</button>'}
 
 /* ---------- MathJax ---------- */
-function wideMath(el){try{(el||document).querySelectorAll('mjx-container:not([display="true"])').forEach(function(m){var p=m.parentElement;if(p&&m.getBoundingClientRect().width>p.clientWidth+1)m.classList.add('mjwide')})}catch(e){}}
+function wideMath(el){try{(el||document).querySelectorAll('mjx-container:not([display="true"])').forEach(function(m){var p=m.parentElement;if(!p)return;var w=m.getBoundingClientRect().width,c=p.clientWidth-(m.closest('.anim-f')?20:0);if(w<=c+1)return;
+  if(m.closest('.anim-f')&&c/w>=.66){m.style.fontSize=(Math.floor(c/w*100)/100)+'em';return} /* Animation: Ergebnis soll ganz sichtbar sein, lieber etwas kleiner */
+  m.classList.add('mjwide')})}catch(e){}}
 function ts(el){try{if(window.MathJax&&MathJax.typesetPromise){if(MathJax.typesetClear)MathJax.typesetClear([el]);MathJax.typesetPromise([el]).then(function(){wideMath(el)}).catch(function(){})}}catch(e){}}
 window.__typesetMain=function(){ts(main);if(!layer.hidden)ts(layer)};
 setTimeout(function(){if(!(window.MathJax&&MathJax.typesetPromise)){document.body.classList.add('nomj');toast('Formeln werden gerade nur als Text gezeigt (kein Internet?).')}},7000);
@@ -184,7 +186,7 @@ function route(keep){try{ensureFixPlans()}catch(e){}
     else if(v==='symbole')html=vSymbole();
     else html=vHeute();
   }catch(err){html='<div class="wrap"><p class="empty">Hier ist etwas schiefgelaufen: '+esc(err.message)+'</p></div>';console.error(err)}
-  main.innerHTML=html;
+  main.innerHTML=html;animInit(main);
   $$('.nav a').forEach(function(a){a.classList.toggle('on',a.getAttribute('data-v')===(v==='fach'||v==='studium'||v==='symbole'?'faecher':v))});
   var nb=$('#navbadge'),mc=missed().length;if(nb){nb.textContent=mc;nb.hidden=!mc}
   window.scrollTo(0,keep?y:0);ts(main);
@@ -453,6 +455,7 @@ function vLecture(m,l){
       if(bk.tip!=null)return '<div class="tipbox">'+bk.tip+'</div>';
       if(bk.f!=null){var f=FORM[bk.f];return f?'<div class="flist one">'+fxCard(f)+'</div>':''}
       if(bk.v!=null){var v=vis[bk.v];return v?'<figure class="fig"><div class="ft">'+esc(v.title||'')+'</div>'+v.svg+(v.caption?'<figcaption>'+v.caption+'</figcaption>':'')+'</figure>':''}
+      if(bk.anim!=null){var an=typeof bk.anim==='number'?(l.anims||[])[bk.anim]:(l.anims||[]).find(function(z){return z.id===bk.anim});return an?animHtml(an):''}
       if(bk.ex!=null){var e=typeof bk.ex==='object'?bk.ex:exs[bk.ex];if(!e)return '';var i=exi++;return '<div class="card ex" data-ex="'+i+'"><h3>'+e.title+'</h3><ol class="steps">'+(e.steps||[]).map(function(st,j){return '<li'+(j>0?' hidden':'')+'>'+st+'</li>'}).join('')+'</ol>'+((e.steps||[]).length>1?'<div class="btns"><button class="btn sm soft" data-act="step">Nächster Schritt</button><button class="btn sm ghost" data-act="stepall">Alle zeigen</button></div>':'')+'</div>'}
       return ''}).join('')+'</section>';
   }else if(l.summary&&l.summary.length)h+='<section class="sec"><h2>Das Wichtigste</h2><div class="card"><ul class="summary">'+l.summary.map(function(s){return '<li>'+s+'</li>'}).join('')+'</ul><p class="small muted" style="margin-top:8px">Unterstrichene Begriffe und Formeln antippen.</p></div>'+acts+'</section>';
@@ -1059,6 +1062,69 @@ function drawSheet(){var top=stack[stack.length-1];if(!top){layer.hidden=true;do
   layer.scrollTop=0;ts(layer)}
 function closeAll(){stack=[];clearInterval(focusIv);drawSheet()}
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&stack.length){stack.pop();drawSheet()}});
+
+/* ================= Schritt-Animationen (lecture.anims, story-Block {anim:i}, SCHEMA.md NACHTRAG 5) =================
+   Das SVG ist das fertige Endbild. Elemente, deren erste Erwähnung ein "on" ist, sind bis zu diesem Schritt ausgeblendet.
+   Schritte wirken kumulativ; Zurück rechnet den Zustand vom Anfang neu, die CSS-Übergänge machen daraus Bewegung. */
+var ANIM={},ANIMRUN=null,ANIMKEY='studium-anim';
+function animPref(){var p={};try{p=JSON.parse(localStorage.getItem(ANIMKEY))||{}}catch(e){}if(p.mode!=='play')p.mode='step';if([.5,1,2].indexOf(p.tempo)<0)p.tempo=1;return p}
+function animPrefSet(k,v){var p=animPref();p[k]=v;try{localStorage.setItem(ANIMKEY,JSON.stringify(p))}catch(e){}}
+function animHtml(a){ANIM[a.id]=a;var n=(a.steps||[]).length,tp=animPref().tempo;
+  var tempo=[.5,1,2].map(function(t){return '<button class="chipbtn'+(t===tp?' on':'')+'" data-aa="tempo" data-t="'+t+'" aria-pressed="'+(t===tp)+'">'+(t===.5?'½':t)+'×</button>'}).join('');
+  return '<figure class="card anim" tabindex="0" data-anim="'+esc(a.id)+'" data-st="step" aria-label="'+esc(a.title||'Animation')+', '+n+' Schritte. Pfeiltasten: Schritt vor und zurück, Leertaste: abspielen oder anhalten.">'+
+   '<div class="ft">'+esc(a.title||'')+'</div><div class="anim-stage">'+a.svg+'</div>'+
+   '<div class="anim-bar" aria-hidden="true"><i></i></div>'+
+   '<div class="anim-text" aria-live="polite">'+(a.steps||[]).map(function(s,i){return '<div class="anim-st'+(i?'':' on')+'"><span class="anim-no">'+(i+1)+'</span><div class="anim-tx">'+s.t+(s.f?'<div class="anim-f">'+mx(s.f)+'</div>':'')+'</div></div>'}).join('')+'</div>'+
+   '<div class="anim-ctl">'+
+    '<div class="anim-g g-step"><button class="btn sm soft" data-aa="prev" aria-label="Schritt zurück">'+IC.back+'</button><span class="anim-cnt"><b>1</b>/'+n+'</span><button class="btn sm" data-aa="next" aria-label="Nächster Schritt">Weiter '+IC.chev+'</button><button class="btn sm ghost" data-aa="play">'+IC.play+' Alles abspielen</button></div>'+
+    '<div class="anim-g g-play"><button class="btn sm soft" data-aa="pause">❚❚ Pause</button><span class="anim-cnt"><b>1</b>/'+n+'</span><span class="anim-tempo" role="group" aria-label="Tempo">'+tempo+'</span></div>'+
+    '<div class="anim-g g-end"><button class="btn sm" data-aa="again">↻ Noch einmal</button><button class="btn sm soft" data-aa="steps">Schrittweise ansehen</button></div>'+
+   '</div>'+(a.caption?'<figcaption>'+a.caption+'</figcaption>':'')+'</figure>'}
+function animTf(s){return String(s).replace(/(translate|rotate|scale)\(([^)]*)\)/g,function(_,f,arg){var n=arg.trim().split(/[\s,]+/).map(Number);
+  if(f==='translate')return 'translate('+n[0]+'px,'+(n[1]||0)+'px)';
+  if(f==='scale')return 'scale('+n[0]+','+(n.length>1?n[1]:n[0])+')';
+  if(n.length===3)return 'translate('+n[1]+'px,'+n[2]+'px) rotate('+n[0]+'deg) translate('+(-n[1])+'px,'+(-n[2])+'px)';
+  return 'rotate('+n[0]+'deg)'})}
+function animState(a,k){var first={},vis={},set={},props={};
+  a.steps.forEach(function(s){(s.on||[]).forEach(function(id){if(!(id in first))first[id]=0});(s.off||[]).forEach(function(id){if(!(id in first))first[id]=1});
+    Object.keys(s.set||{}).forEach(function(id){props[id]=props[id]||{};Object.keys(s.set[id]).forEach(function(q){props[id][q]=1})})});
+  Object.keys(first).forEach(function(id){vis[id]=!!first[id]});
+  for(var i=0;i<=k;i++){var s=a.steps[i];(s.on||[]).forEach(function(id){vis[id]=true});(s.off||[]).forEach(function(id){vis[id]=false});
+    Object.keys(s.set||{}).forEach(function(id){set[id]=set[id]||{};Object.keys(s.set[id]).forEach(function(q){set[id][q]=s.set[id][q]})})}
+  return {vis:vis,set:set,props:props}}
+function animShow(fig,k,instant){var a=ANIM[fig.getAttribute('data-anim')];if(!a)return;var n=a.steps.length;k=Math.max(0,Math.min(n-1,k));fig.setAttribute('data-k',k);
+  var svg=fig.querySelector('.anim-stage svg'),st=animState(a,k),el=function(id){return svg&&svg.querySelector('[id="'+id.replace(/"/g,'')+'"]')};
+  if(instant)fig.classList.add('no-tr');
+  /* Deckkraft immer ausdrücklich setzen: aus → 0, an → set.opacity oder 1 (das SVG darf opacity="0" für das Standbild tragen) */
+  Object.keys(st.vis).forEach(function(id){var e=el(id);if(e)e.classList.toggle('is-off',!st.vis[id])});
+  Object.keys(st.props).forEach(function(id){var e=el(id);if(!e)return;Object.keys(st.props[id]).forEach(function(q){if(q==='opacity')return;var v=st.set[id]&&st.set[id][q];
+    if(v==null)e.style.removeProperty(q);else e.style.setProperty(q,q==='transform'?animTf(v):String(v))})});
+  Object.keys(st.vis).concat(Object.keys(st.props).filter(function(id){return st.props[id].opacity})).forEach(function(id){var e=el(id);if(!e)return;
+    var o=st.set[id]&&st.set[id].opacity;if(st.vis[id]===false)e.style.opacity='0';else if(o!=null)e.style.opacity=String(o);else if(st.vis[id])e.style.opacity='1';else e.style.removeProperty('opacity')});
+  $$('.anim-st',fig).forEach(function(d,i){d.classList.toggle('on',i===k)});
+  $$('.anim-cnt b',fig).forEach(function(b){b.textContent=k+1});
+  var pv=fig.querySelector('[data-aa=prev]'),nx=fig.querySelector('[data-aa=next]');if(pv)pv.disabled=k===0;if(nx)nx.disabled=k===n-1;
+  var bar=fig.querySelector('.anim-bar i');if(bar)bar.style.width=(n>1?k/(n-1)*100:100)+'%';
+  if(instant){void fig.offsetWidth;fig.classList.remove('no-tr')}}
+function animStop(to){if(!ANIMRUN)return;clearTimeout(ANIMRUN.t);var f=ANIMRUN.fig;ANIMRUN=null;if(f.isConnected&&to)f.setAttribute('data-st',to)}
+function animPlay(fig){animStop('step');var a=ANIM[fig.getAttribute('data-anim')];if(!a)return;var n=a.steps.length,k=+fig.getAttribute('data-k')||0;
+  if(k>=n-1){k=0;animShow(fig,0,true)}
+  fig.setAttribute('data-st','play');var run=ANIMRUN={fig:fig};
+  (function tick(){run.t=setTimeout(function(){if(ANIMRUN!==run)return;if(!fig.isConnected){ANIMRUN=null;return}
+    k++;animShow(fig,k);if(k>=n-1){ANIMRUN=null;run.t=setTimeout(function(){if(fig.isConnected&&fig.getAttribute('data-st')==='play')fig.setAttribute('data-st','end')},900);return}tick()},2500/animPref().tempo)})()}
+function animInit(root){var figs=$$('figure.anim',root);if(!figs.length)return;var auto=animPref().mode==='play'&&!reduceMotion;
+  figs.forEach(function(f){animShow(f,0,true)});
+  if(auto&&window.IntersectionObserver){var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting&&!ANIMRUN&&e.target.getAttribute('data-st')==='step'&&!e.target.hasAttribute('data-seen')){e.target.setAttribute('data-seen','');io.unobserve(e.target);animPlay(e.target)}})},{threshold:.6});figs.forEach(function(f){io.observe(f)})}}
+document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('[data-aa]');if(!b)return;var fig=b.closest('figure.anim');if(!fig)return;var w=b.getAttribute('data-aa'),k=+fig.getAttribute('data-k')||0;
+  if(w==='prev'||w==='next'){animStop('step');animPrefSet('mode','step');animShow(fig,k+(w==='next'?1:-1))}
+  else if(w==='play'||w==='again'){animPrefSet('mode','play');animPlay(fig)}
+  else if(w==='pause'){animStop('step');animPrefSet('mode','step')}
+  else if(w==='steps'){animStop();fig.setAttribute('data-st','step');animPrefSet('mode','step');animShow(fig,0)}
+  else if(w==='tempo'){var t=+b.getAttribute('data-t');animPrefSet('tempo',t);$$('[data-aa=tempo]',fig).forEach(function(x){var on=x===b;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on)});if(ANIMRUN&&ANIMRUN.fig===fig)animPlay(fig)}});
+document.addEventListener('keydown',function(e){var fig=e.target.closest&&e.target.closest('figure.anim');if(!fig||e.altKey||e.ctrlKey||e.metaKey)return;var a=ANIM[fig.getAttribute('data-anim')];if(!a)return;var k=+fig.getAttribute('data-k')||0;
+  if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();animStop('step');animShow(fig,k+(e.key==='ArrowRight'?1:-1))}
+  else if(e.key==='Home'||e.key==='End'){e.preventDefault();animStop('step');animShow(fig,e.key==='Home'?0:a.steps.length-1)}
+  else if((e.key===' '||e.key==='Spacebar')&&e.target===fig){e.preventDefault();if(ANIMRUN&&ANIMRUN.fig===fig){animStop('step');animPrefSet('mode','step')}else{animPrefSet('mode','play');animPlay(fig)}}});
 
 /* ================= Klicks ================= */
 document.addEventListener('change',function(e){var t=e.target;if(t&&t.getAttribute&&t.getAttribute('data-act')==='grp'){S.ui.grp=S.ui.grp||{};S.ui.grp[t.getAttribute('data-k')]=t.value;save();rerender()}});
