@@ -1154,7 +1154,8 @@ function authRefresh(){if(!AUTH.refresh_token)return Promise.reject(new Error('n
 function authReady(){if(!loggedIn())return Promise.reject(new Error('nicht angemeldet'));if(AUTH.exp&&Date.now()>AUTH.exp-60000)return authRefresh();return Promise.resolve()}
 function login(email,pw){return sbFetch('/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email:email,password:pw})},true).then(function(j){AUTH={access_token:j.access_token,refresh_token:j.refresh_token,exp:(j.expires_at||0)*1000,user:j.user};authSave()})}
 function logout(){var t=AUTH.access_token;AUTH={};authSave();SY={};sySave();if(t)sbFetch('/auth/v1/logout',{method:'POST',headers:{'Authorization':'Bearer '+t}},true).catch(function(){})}
-function recover(email){return sbFetch('/auth/v1/recover',{method:'POST',body:JSON.stringify({email:email})},true)}
+function appUrl(){return location.origin+location.pathname.replace(/index\.html$/,'')}
+function recover(email){return sbFetch('/auth/v1/recover?redirect_to='+encodeURIComponent(appUrl()),{method:'POST',body:JSON.stringify({email:email})},true)}
 function setPassword(pw){return authReady().then(function(){return sbFetch('/auth/v1/user',{method:'PUT',body:JSON.stringify({password:pw})})})}
 /* Rückkehr vom „Passwort vergessen“-Link. Zwei Formen: #token_hash=…&type=recovery (sicher gegen Mail-Scanner, die App bestätigt den
    Link selbst) oder #access_token=…&type=recovery (Standardvorlage von Supabase). */
