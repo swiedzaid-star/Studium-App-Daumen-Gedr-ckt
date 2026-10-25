@@ -666,7 +666,7 @@ body[data-page=heute] .notice,body[data-page=heute] main .banner{background:colo
 /* V3: illustrierter Kopfbereich statt Muster */
 body .band::before{display:none!important}
 body .band{min-height:230px;background:linear-gradient(100deg,var(--band) 30%,color-mix(in srgb,var(--band) 70%,transparent) 55%,transparent 85%),var(--bandimg) right bottom/auto 150% no-repeat,var(--band)}
-body.pg-mathe{--bandimg:url(scene-mathe-dark.svg)}body.pg-stat{--bandimg:url(scene-stat-dark.svg)}body.pg-bsk{--bandimg:url(scene-bsk-dark.svg)}body.pg-bure{--bandimg:url(scene-bure-dark.svg)}body.pg-gdm{--bandimg:url(scene-gdm-dark.svg)}body.pg-mech{--bandimg:url(scene-mech-dark.svg)}body.pg-spa{--bandimg:url(scene-spa-dark.svg)}
+body.pg-studium{--bandimg:url(scene-studium-dark.svg)}body.pg-mathe{--bandimg:url(scene-mathe-dark.svg)}body.pg-stat{--bandimg:url(scene-stat-dark.svg)}body.pg-bsk{--bandimg:url(scene-bsk-dark.svg)}body.pg-bure{--bandimg:url(scene-bure-dark.svg)}body.pg-gdm{--bandimg:url(scene-gdm-dark.svg)}body.pg-mech{--bandimg:url(scene-mech-dark.svg)}body.pg-spa{--bandimg:url(scene-spa-dark.svg)}
 /* V4: Fortschrittsbalken in Fachfarbe */
 body .bar{background:color-mix(in srgb,var(--hi) 22%,transparent)!important}
 body .bar>span{background:linear-gradient(90deg,var(--hi),color-mix(in srgb,var(--hi) 70%,#fff))!important}
@@ -699,3 +699,5 @@ select[data-act=grp]{flex:1;min-width:0;max-width:100%}.toggle:has(select){flex-
 
 mjx-container.mjwide{display:inline-block;max-width:100%;overflow-x:auto;overflow-y:hidden;vertical-align:middle;padding-bottom:2px}
 .lec .tt,.sec .tt{display:block;max-width:100%;overflow-x:auto}
+
+.note-l{margin:0 0 6px}.note-l:last-child{margin:0}.note-l b.nl{color:var(--acc)}

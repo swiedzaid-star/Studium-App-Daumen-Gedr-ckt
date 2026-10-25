@@ -61,7 +61,8 @@ MODS.forEach(function(m){
 function cls(id){return 'm-'+(id||'studium')}
 function termsOf(m){var a=[];m.lectures.forEach(function(l){(l.terms||[]).forEach(function(t){a.push(t)})});return a}
 function tasksOfTopic(tid){return MOD[TOPIC[tid]&&TOPIC[tid].mod]?MOD[TOPIC[tid].mod].tasks.filter(function(t){return t.topic===tid}):[]}
-function topicsOfLecture(l){return MOD[l.mod].topics.filter(function(t){return t.lecture===l.id})}
+function noteHtml(n){return String(n).split(/\n+/).map(function(l){l=l.trim();if(!l)return '';var m=l.match(/^([^:]{2,40}):\s+(.*)$/);return '<p class="note-l">'+(m?'<b class="nl">'+esc(m[1])+':</b> '+esc(m[2]):esc(l))+'</p>'}).join('')}
+function topicsOfLecture(l){var ex=l.topics||[];return MOD[l.mod].topics.filter(function(t){return t.lecture===l.id||ex.indexOf(t.id)>=0})}
 function lectureDate(t){var l=LECT[t.lecture];return l&&l.date?pd(l.date):null}
 function lecHeld(l){var d=pd(l.date);if(!d)return true;if(d<TODAY)return true;if(d>TODAY)return false;var end=tmin((l.time||'').split('–')[1]||'');return end==null?false:(NOW.getHours()*60+NOW.getMinutes())>=end}
 
@@ -726,7 +727,7 @@ function vExams(m){
 function vExam(m,x){
   if(!x)return '<div class="card empty">Nicht gefunden.</div>';
   var di=diagItems(m,x),dg=S.diag[x.id],p=S.plans[x.id];
-  var h='<section class="sec"><a class="back2" href="#/fach/'+m.id+'/pruefungen">'+IC.back+' Alle Prüfungen</a><h2 style="font-size:1.5rem;margin-top:8px">'+esc(x.name)+'</h2><p class="muted">'+(x.date?WDL[pd(x.date).getDay()]+', '+pd(x.date).getDate()+'. '+MON[pd(x.date).getMonth()]+(x.time?' · '+esc(x.time):'')+' · <b>'+rel(pd(x.date))+'</b>':'Termin offen')+(x.place?' · '+esc(x.place):'')+'</p>'+(x.note?'<div class="card small">'+esc(x.note)+'</div>':'')+'</section>';
+  var h='<section class="sec"><a class="back2" href="#/fach/'+m.id+'/pruefungen">'+IC.back+' Alle Prüfungen</a><h2 style="font-size:1.5rem;margin-top:8px">'+esc(x.name)+'</h2><p class="muted">'+(x.date?WDL[pd(x.date).getDay()]+', '+pd(x.date).getDate()+'. '+MON[pd(x.date).getMonth()]+(x.time?' · '+esc(x.time):'')+' · <b>'+rel(pd(x.date))+'</b>':'Termin offen')+(x.place?' · '+esc(x.place):'')+'</p>'+(x.note?'<div class="card small">'+noteHtml(x.note)+'</div>':'')+'</section>';
   var er=examReady(x),topicsHtml='';
   if(er!=null){h+='<section class="sec"><div class="card">'+rbar(er,'Bereit für '+esc(x.name))+'<p class="small muted" style="margin:8px 0 0">Rechnet sich aus deinen Übungen (70 %) und gekonnten Begriffen (30 %) je Thema.</p></div></section>';
     topicsHtml='<section class="sec"><details class="more list"><summary>Alle Themen einzeln lernen und üben</summary>'+(x.topics||[]).map(function(tid){var tp=TOPIC[tid],r=topicReady(tid),l=tp&&LECT[tp.lecture];
