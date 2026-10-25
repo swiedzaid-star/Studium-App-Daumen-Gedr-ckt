@@ -140,6 +140,7 @@ var IC={
  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
  x:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
  back:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+ eye:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="3"/></svg>',
  chev:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
  fire:'<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2c1 4 5 5.5 5 10.5A5 5 0 0 1 7 12.5c0-2 1-3.5 2-4.5.3 1.6 1.2 2.6 2.3 2.6C11 8 11 5 12 2z"/></svg>',
  bolt:'<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg>',
@@ -173,7 +174,7 @@ function route(keep){try{ensureFixPlans()}catch(e){}
   var v=p[0]||'heute',html='';
   document.body.setAttribute('data-page',v==='fach'&&MOD[p[1]]?'fach':v);['mathe','stat','bsk','bure','gdm','mech','spa','studium'].forEach(function(k){document.body.classList.remove('pg-'+k)});if(v==='fach'&&MOD[p[1]])document.body.classList.add('pg-'+p[1]);if(v==='studium'||v==='symbole')document.body.classList.add('pg-studium');
   try{
-    if(!loggedIn()||AUTH.recovery){main.innerHTML=vLogin();document.body.setAttribute('data-page','studium');document.body.classList.add('pg-studium');window.scrollTo(0,0);return}
+    document.body.classList.remove('pg-login');if(!loggedIn()||AUTH.recovery){main.innerHTML=vLogin();document.body.setAttribute('data-page','login');document.body.classList.add('pg-studium','pg-login');window.scrollTo(0,0);return}
     if(v==='heute')html=vHeute();
     else if(v==='kalender')html=vKalender();
     else if(v==='fristen')html=vFristen(p[1]||'bald');
@@ -1105,7 +1106,8 @@ document.addEventListener('click',function(e){
   if(a==='runsess'){runSession(t.getAttribute('data-x'),t.getAttribute('data-s'));return}
   if(a==='sess'){var p=S.plans[t.getAttribute('data-x')],sid=t.getAttribute('data-s');if(p){p.done[sid]=!p.done[sid];if(p.done[sid])activity(10);save();rerender()}return}
   if(a==='kr'){kopfrechnen();return}
-  if(a==='login'){var em=($('#lmail').value||'').trim(),pw=$('#lpw').value||'';if(!em||!pw){toast('E-Mail und Passwort eingeben.');return}t.disabled=true;login(em,pw).then(function(){toast('Willkommen!');rerender();syncNow(false)}).catch(function(e){t.disabled=false;var el=$('#lerr');if(el)el.textContent=/invalid/i.test(e.message)?'E-Mail oder Passwort stimmt nicht.':'Anmeldung fehlgeschlagen: '+e.message});return}
+  if(a==='eye'){var pi=$('#lpw');if(pi){pi.type=pi.type==='password'?'text':'password';t.classList.toggle('on',pi.type==='text')}return}
+  if(a==='login'){var em=($('#lmail').value||'').trim(),pw=$('#lpw').value||'';if(!em||!pw){var le=$('#lerr');if(le)le.textContent='E-Mail und Passwort eingeben.';return}t.disabled=true;t.classList.add('busy');login(em,pw).then(function(){toast('Willkommen!');rerender();syncNow(false)}).catch(function(e){t.disabled=false;t.classList.remove('busy');var el=$('#lerr');if(el)el.textContent=/invalid/i.test(e.message)?'E-Mail oder Passwort stimmt nicht.':'Anmeldung fehlgeschlagen: '+e.message});return}
   if(a==='forgot'){var em2=($('#lmail').value||'').trim();if(!em2){toast('Erst die E-Mail eintragen.');return}try{localStorage.setItem('studium-recover',em2)}catch(e){}recover(em2).then(function(){toast('Falls ein Konto existiert, kommt gleich eine E-Mail.')}).catch(function(e){toast('Fehler: '+e.message)});return}
   if(a==='pwset'||a==='pwchange'){var p1=a==='pwset'?($('#pw1').value||''):prompt('Neues Passwort (mind. 12 Zeichen, Groß/Klein, Zahl, Sonderzeichen):'),p2=a==='pwset'?($('#pw2').value||''):p1;if(p1==null)return;if(p1.length<12){toast('Mindestens 12 Zeichen.');return}if(p1!==p2){toast('Die Passwörter stimmen nicht überein.');return}setPassword(p1).then(function(){AUTH.recovery=false;authSave();toast('Passwort gespeichert.');rerender()}).catch(function(e){toast('Fehler: '+e.message)});return}
   if(a==='syncnow'){syncNow(false).then(function(){toast(SY.err?'Problem: '+SY.err:'Synchronisiert.')});return}
@@ -1204,10 +1206,21 @@ function syncNow(quiet){if(!loggedIn()||syBusy||!navigator.onLine)return Promise
 function syLater(){if(!loggedIn())return;clearTimeout(syTimer);syTimer=setTimeout(function(){syncNow(true)},4000)}
 function syStatus(){if(!loggedIn())return 'Nicht angemeldet';if(SY.err)return '<span class="badc">Problem: '+esc(SY.err)+'</span>';if(!SY.last)return 'Angemeldet, noch nicht synchronisiert';var d=new Date(SY.last);return '<span class="okc">Synchron</span> · zuletzt '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' Uhr'}
 function syncCard(){var u=AUTH.user||{};return '<div class="card"><b>Konto und Geräte-Sync</b><p class="small" style="margin:6px 0">Angemeldet als <b>'+esc(u.email||'')+'</b></p><p class="small" id="systat" style="margin:6px 0">'+syStatus()+'</p><p class="small muted">Fortschritt, Pläne und Einstellungen gleichen sich automatisch ab: beim Öffnen, alle 2 Minuten und kurz nach jeder Änderung. Ohne Internet läuft alles weiter und wird später nachgetragen.</p><div class="btns"><button class="btn sm" data-act="syncnow">Jetzt synchronisieren</button><button class="btn sm ghost" data-act="pwchange">Passwort ändern</button><button class="btn sm ghost" data-act="logout">Abmelden</button></div></div>'}
-function vLogin(){var rec=AUTH.recovery;return '<div class="m-studium"><div class="band"><div class="wrap"><h1>Studium</h1><p style="opacity:.9">Anmelden, dann geht es weiter.</p></div></div><div class="wrap"><section class="sec"><div class="card" style="max-width:420px;margin:0 auto">'+
-  (rec?'<h2>Neues Passwort setzen</h2><p class="small muted">Mindestens 12 Zeichen mit Groß- und Kleinbuchstaben, Zahl und Sonderzeichen.</p><input class="search" id="pw1" type="password" placeholder="Neues Passwort" autocomplete="new-password"><input class="search" id="pw2" type="password" placeholder="Noch einmal" autocomplete="new-password" style="margin-top:8px"><div class="btns" style="margin-top:10px"><button class="btn" data-act="pwset">Speichern</button></div>'
-  :'<h2>Anmelden</h2><input class="search" id="lmail" type="email" placeholder="E-Mail" autocomplete="username" inputmode="email"><input class="search" id="lpw" type="password" placeholder="Passwort" autocomplete="current-password" style="margin-top:8px"><div class="btns" style="margin-top:10px"><button class="btn" data-act="login">Anmelden</button><button class="btn sm ghost" data-act="forgot">Passwort vergessen</button></div><p class="small muted" style="margin-top:10px">Diese App ist privat. Es gibt keine Registrierung.</p>')+
-  '<p class="small badc" id="lerr" style="margin-top:8px"></p></div></section></div></div>'}
+function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;D.mods.forEach(function(m){nT+=(m.tasks||[]).length;nF+=(m.formulas||[]).length});var nM=D.mods.filter(function(m){return (m.lectures||[]).length}).length;
+  return '<div class="lg"><div class="lg-sky" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="lg-in">'+
+  '<section class="lg-hero"><div class="lg-mark">'+SQSVG+'</div><p class="lg-kick">WiIng Bau · RWTH Aachen · WS 26/27</p><h1>Dein Semester.<br><span>Ein Plan.</span></h1>'+
+  '<p class="lg-sub">Vorlesungen als Lerntexte, eigene Aufgaben mit Lösungsweg, Fristen und Lernpläne – auf jedem Gerät derselbe Stand.</p>'+
+  '<ul class="lg-stats"><li><b>'+nM+'</b><span>Fächer</span></li><li><b>'+nT+'</b><span>Aufgaben</span></li><li><b>'+nF+'</b><span>Formeln</span></li><li><b>∞</b><span>Zufallszahlen</span></li></ul></section>'+
+  '<section class="lg-card" aria-label="'+(rec?'Neues Passwort setzen':'Anmelden')+'">'+
+  (rec?'<h2>Neues Passwort</h2><p class="small muted">Mindestens 12 Zeichen mit Groß- und Kleinbuchstaben, Zahl und Sonderzeichen.</p>'+
+     '<label class="lg-f"><input id="pw1" type="password" placeholder=" " autocomplete="new-password"><span>Neues Passwort</span></label>'+
+     '<label class="lg-f"><input id="pw2" type="password" placeholder=" " autocomplete="new-password"><span>Noch einmal</span></label>'+
+     '<button class="btn lg-go" data-act="pwset">Speichern '+IC.chev+'</button>'
+   :'<h2>Willkommen zurück</h2><p class="small muted">Melde dich an, dann geht es da weiter, wo du aufgehört hast.</p>'+
+     '<label class="lg-f"><input id="lmail" type="email" placeholder=" " autocomplete="username" inputmode="email" spellcheck="false"><span>E-Mail</span></label>'+
+     '<label class="lg-f"><input id="lpw" type="password" placeholder=" " autocomplete="current-password"><span>Passwort</span><button type="button" class="lg-eye" data-act="eye" aria-label="Passwort anzeigen">'+IC.eye+'</button></label>'+
+     '<button class="btn lg-go" data-act="login">Anmelden '+IC.chev+'</button><button class="lg-link" data-act="forgot">Passwort vergessen?</button>')+
+  '<p class="small badc" id="lerr" role="alert"></p><p class="lg-foot">Privat. Keine Registrierung. Daten in der EU. <button class="lg-link" data-act="privacy">Datenschutz</button></p></section></div></div>'}
 setTimeout(function(){syncNow(true)},1500);setInterval(function(){if(!document.hidden)syncNow(true)},120000);
 document.addEventListener('visibilitychange',function(){syncNow(true)});window.addEventListener('online',function(){syncNow(true)});
 window.__dbg={S:function(){return S},dynItems:dynItems,dynEval:dynEval,symGaps:symGaps,symKeys:symKeys,D:D,weeklyOn:weeklyOn,pd:pd};
