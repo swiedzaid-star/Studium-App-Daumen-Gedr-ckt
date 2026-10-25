@@ -193,7 +193,7 @@ function route(keep){try{ensureFixPlans()}catch(e){}
   main.innerHTML=html;animInit(main);
   $$('.nav a').forEach(function(a){a.classList.toggle('on',a.getAttribute('data-v')===(v==='fach'||v==='studium'||v==='symbole'?'faecher':v))});
   var nb=$('#navbadge'),mc=missed().length;if(nb){nb.textContent=mc;nb.hidden=!mc}
-  window.scrollTo(0,keep?y:0);var tp=ts(main);if(keep&&y){ /* Lesestelle halten: nach dem Formelsatz verschieben sich Höhen, deshalb noch einmal hinspringen */ tp.then(function(){window.scrollTo(0,y)});var n=0,iv=setInterval(function(){window.scrollTo(0,y);if(++n>=5)clearInterval(iv)},150)}
+  window.scrollTo(0,keep?y:0);var tp=ts(main);if(keep&&y){ /* Lesestelle halten: nach dem Formelsatz verschieben sich Höhen, deshalb noch einmal hinspringen */ tp.then(function(){window.scrollTo(0,y)})}
   var on=$('.tabs .on',main);if(on&&on.scrollIntoView)try{on.scrollIntoView({inline:'center',block:'nearest'})}catch(e){}
   var fc=main.querySelector('.hcard:not(.done)');if(fc)fc.classList.add('focus');
   setTimeout(hideSquirrel,80);
@@ -1065,7 +1065,7 @@ function drawSheet(){var top=stack[stack.length-1];if(!top){layer.hidden=true;do
   layer.hidden=false;document.body.classList.add('noscroll');
   layer.innerHTML='<div class="lhead"><div class="wrap"><button class="x" data-act="'+(stack.length>1?'pop':'close')+'" aria-label="'+(stack.length>1?'Zurück':'Schließen')+'">'+(stack.length>1?IC.back:IC.x)+'</button><b class="grow">'+esc(top.title||'')+'</b></div></div><div class="wrap lbody">'+top.html+'</div>';
   /* Zurück zu einer vorherigen Karte: an der alten Lesestelle weitermachen (auch nach dem Formelsatz) */
-  var y=top.scroll||0;layer.scrollTop=y;ts(layer);if(y){var n=0,iv=setInterval(function(){layer.scrollTop=y;if(++n>=6)clearInterval(iv)},120)}}
+  var y=top.scroll||0;layer.scrollTop=y;ts(layer).then(function(){if(y)layer.scrollTop=y})}
 function closeAll(){stack=[];clearInterval(focusIv);drawSheet()}
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&stack.length){stack.pop();drawSheet()}});
 
