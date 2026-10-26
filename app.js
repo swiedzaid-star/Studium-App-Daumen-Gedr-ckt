@@ -196,6 +196,7 @@ function route(keep){try{ensureFixPlans()}catch(e){}
   $$('.nav a').forEach(function(a){a.classList.toggle('on',a.getAttribute('data-v')===(v==='fach'||v==='studium'||v==='symbole'?'faecher':v))});
   var nb=$('#navbadge'),mc=missed().length;if(nb){nb.textContent=mc;nb.hidden=!mc}
   window.scrollTo(0,keep?y:0);var tp=ts(main);if(keep&&y){ /* Lesestelle halten: nach dem Formelsatz verschieben sich Höhen, deshalb noch einmal hinspringen */ tp.then(function(){window.scrollTo(0,y)})}
+  if(!keep){var oc=document.querySelector('.tourc');if(oc){oc.remove();tourClear();TOUR.key=null}}setTimeout(function(){tourMaybe(false)},700);
   var on=$('.tabs .on',main);if(on&&on.scrollIntoView)try{on.scrollIntoView({inline:'center',block:'nearest'})}catch(e){}
   var fc=main.querySelector('.hcard:not(.done)');if(fc)fc.classList.add('focus');
   setTimeout(hideSquirrel,80);
@@ -216,6 +217,24 @@ function rerender(){route(true)}
 var SQSVG="<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><ellipse cx='40' cy='64' rx='24' ry='40' transform='rotate(-18 40 64)' fill='#ff8f2e'/><circle cx='56' cy='27' r='15' fill='#ff8f2e'/><ellipse cx='36' cy='66' rx='11' ry='27' transform='rotate(-18 36 66)' fill='#ffd34d' opacity='.6'/><circle cx='57' cy='28' r='6' fill='#ffd34d' opacity='.6'/><ellipse cx='72' cy='84' rx='22' ry='25' fill='#ff6a1a'/><ellipse cx='79' cy='90' rx='12' ry='16' fill='#ffe39a'/><ellipse cx='62' cy='106' rx='11' ry='5' fill='#ff6a1a'/><ellipse cx='86' cy='107' rx='10' ry='5' fill='#ff6a1a'/><path d='M70 34L66 16L80 30Z' fill='#ff6a1a'/><path d='M71 30L69 21L76 29Z' fill='#ff9fb1'/><circle cx='80' cy='48' r='19' fill='#ff6a1a'/><ellipse cx='95' cy='55' rx='9' ry='7' fill='#ffe39a'/><circle cx='103' cy='52' r='2.8' fill='#2a1433'/><circle cx='87' cy='45' r='4.6' fill='#2a1433'/><circle cx='88.6' cy='43.4' r='1.6' fill='#fff'/><ellipse cx='88' cy='57' rx='4' ry='2.6' fill='#ff7f9a' opacity='.8'/><path d='M62 37A18 15 0 0 1 98 37Z' fill='#ffd34d'/><rect x='58' y='34.5' width='44' height='5.5' rx='2.75' fill='#ffbf1f'/><rect x='78' y='23' width='4' height='13' rx='2' fill='#ffbf1f'/><ellipse cx='94' cy='79' rx='7' ry='8.5' fill='#b8642b'/><path d='M86 74Q94 66 102 74Z' fill='#7a3f1d'/><rect x='93' y='66' width='2' height='5' fill='#7a3f1d'/><ellipse cx='90' cy='82' rx='6' ry='4.5' fill='#ff6a1a'/></svg>";
 var SQSAY=['Du packst das!','Kleine Häppchen, großer Fortschritt.','Erst verstehen, dann rechnen.','Pause machen ist auch Lernen.','Noch eine Aufgabe, dann Nuss!','Bauen ist Statik – Lernen auch.','Gefunden! Weiter so.','Heute ein Stein, morgen ein Haus.'];
 var SQPOS={};
+/* ===== Eichhörnchen-Tour „Lernen beim Tun“: beim ersten Besuch einer Seite 2–4 kurze Erklärungen ===== */
+var TOUR={key:null,i:0,el:null};
+function tourKey(){var p=(location.hash||'#/heute').slice(2).split('/'),v=p[0]||'heute';
+  if(v==='fach'&&MOD[p[1]]){if(p[2]==='vorlesungen'&&p[3])return 'vorlesung';if(p[2]==='karten')return 'karten';if(!p[2]||p[2]==='woche')return 'fach';return null}
+  return ['heute','kalender','fristen','faecher','symbole','studium'].indexOf(v)>=0?v:null}
+function tourFind(st){var all=document.querySelectorAll(st.sel==='nav'?'.nav':'main '+st.sel);for(var i=0;i<all.length;i++){var e=all[i];if(st.has&&(e.textContent||'').indexOf(st.has)<0)continue;if(e.offsetParent!==null||st.sel==='nav')return e}return null}
+function tourOff(){try{return localStorage.getItem('studium-notour')==='1'}catch(e){return false}}
+function tourMaybe(force){var k=tourKey(),steps=k&&D.tour&&D.tour[k];if(!steps||!steps.length||tourOff())return;S.ui=S.ui||{};S.ui.tour=S.ui.tour||{};
+  /* Nur für neue Nutzer: wer die App schon benutzt hat, bekommt die Tour nicht nachträglich auf jeder Seite (Einstellungen → „Erklärungen noch einmal zeigen“) */
+  if(!S.ui.tourInit){S.ui.tourInit=1;var used=(S.xp||0)>0||Object.keys(S.read||{}).length||Object.keys(S.done||{}).length;if(used){Object.keys(D.tour).forEach(function(x){S.ui.tour[x]=true})}save()}
+  if(!force&&S.ui.tour[k])return;if(!layer.hidden||document.querySelector('.tourc'))return;TOUR.key=k;TOUR.i=0;tourDraw()}
+function tourClear(){if(TOUR.el)TOUR.el.classList.remove('tourhl');TOUR.el=null}
+function tourDraw(){tourClear();var old=document.querySelector('.tourc');if(old)old.remove();var steps=D.tour[TOUR.key],st=steps[TOUR.i];if(!st)return tourEnd();
+  var el=tourFind(st);if(el){el.classList.add('tourhl');TOUR.el=el;try{el.scrollIntoView({block:'center',behavior:'smooth'})}catch(e){}}
+  var last=TOUR.i===steps.length-1,c=document.createElement('div');c.className='tourc';c.setAttribute('role','dialog');c.setAttribute('aria-live','polite');
+  c.innerHTML='<div class="tour-sq" aria-hidden="true">'+SQSVG+'</div><div class="tour-b"><p class="tour-t"></p><div class="tour-f"><span class="tour-n">'+(TOUR.i+1)+'/'+steps.length+'</span><button class="btn sm ghost" data-act="tourskip">Alles klar</button><button class="btn sm" data-act="tournext">'+(last?'Fertig':'Weiter')+'</button></div></div>';
+  c.querySelector('.tour-t').textContent=st.t;document.body.appendChild(c);var b=c.querySelector('[data-act=tournext]');if(b)b.focus({preventScroll:true})}
+function tourEnd(){tourClear();var c=document.querySelector('.tourc');if(c)c.remove();if(TOUR.key){S.ui=S.ui||{};S.ui.tour=Object.assign({},S.ui.tour||{});S.ui.tour[TOUR.key]=true;save()}TOUR.key=null}
 function hideSquirrel(){
   var old=document.querySelector('.sqh');if(old)old.remove();
   var h=location.hash||'#/heute',pos=SQPOS[h];if(!pos)pos=SQPOS[h]={side:Math.random()<.5?'l':'r',f:Math.random()};
@@ -255,6 +274,14 @@ function haeppchen(){
 }
 function hDone(k){return S.haeppchen[ymd(TODAY)]&&S.haeppchen[ymd(TODAY)][k]}
 function hMark(k){var d=ymd(TODAY);S.haeppchen[d]=S.haeppchen[d]||{};if(!S.haeppchen[d][k]){S.haeppchen[d][k]=1;save();var hs=haeppchen();if(hs.length&&hs.every(function(h){return hDone(h.key)})){confetti();toast('Alle Häppchen geschafft! +50 XP');activity(50)}}}
+/* ===== „Auf dem Handy installieren“: nur Touch-Geräte, nur solange nicht installiert ===== */
+var INSTALL=null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();INSTALL=e;if(location.hash.indexOf('heute')>=0||!location.hash)rerender()});
+function isStandalone(){try{return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}catch(e){return false}}
+function isTouch(){try{return matchMedia('(pointer: coarse)').matches}catch(e){return false}}
+function isIOS(){return /iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)}
+function installCard(){if(isStandalone()||!isTouch())return '';var t=(S.ui&&S.ui.installHint)||0;if(Date.now()-t<7*864e5)return '';
+  var how=INSTALL?'<button class="btn sm" data-act="install">Installieren</button>':isIOS()?'<p class="small" style="margin:6px 0 0">Tippe unten auf <b>Teilen</b> (Quadrat mit Pfeil) und dann auf <b>Zum Home-Bildschirm</b>.</p>':'<p class="small" style="margin:6px 0 0">Öffne das Browser-Menü (⋮) und tippe auf <b>App installieren</b> bzw. <b>Zum Startbildschirm hinzufügen</b>.</p>';
+  return '<section class="sec"><div class="card instc"><div class="grow"><b>Auf dem Handy installieren</b><p class="small muted" style="margin:4px 0 0">Dann startet die App wie jede andere: eigenes Symbol, Vollbild, auch offline.</p>'+how+'</div><button class="x" data-act="installno" aria-label="Später">'+IC.x+'</button></div></section>'}
 function vHeute(){
   var lv=level(),st=streak(),mis=missed(),hs=haeppchen(),doneN=hs.filter(function(h){return hDone(h.key)}).length;
   var weekEnd=addDays(thisMon,7);
@@ -262,6 +289,7 @@ function vHeute(){
   var h='<div class="wrap top"><div class="eyebrow">'+WDL[TODAY.getDay()]+', '+TODAY.getDate()+'. '+MON[TODAY.getMonth()]+'</div><h1>'+greet()+(S.name?', '+esc(S.name):'')+'</h1>'+(S.name?'':'<div class="card" style="margin-top:12px"><b>Wie heißt du?</b><p class="small muted" style="margin:4px 0 8px">Damit die App dich begrüßt. Wird mit deinen Geräten synchronisiert.</p><div class="btns"><input class="search" id="nm" placeholder="Vorname" autocomplete="given-name" style="flex:1;min-width:0"><button class="btn sm" data-act="setname">Speichern</button></div></div>')+
    '<div class="stats"><span class="stat"><span class="fire">'+IC.fire+'</span><b>'+st+'</b> '+(st===1?'Tag':'Tage')+' Serie</span><span class="stat">'+IC.bolt+'<b>Level '+lv.l+'</b><span class="bar sm"><span style="width:'+Math.round(lv.cur/lv.need*100)+'%"></span></span></span><button class="stat" data-act="theme" data-t="'+(S.theme==='dark'?'light':S.theme==='light'?'auto':'dark')+'" aria-label="Design wechseln">'+(S.theme==='dark'?'☾ Dunkel':S.theme==='light'?'☀ Hell':'◐ Auto')+'</button></div></div>';
   h+='<div class="wrap">';
+  h+=installCard();
   var sn=symNew().length;if(sn)h+='<a class="alert newsym" href="#/symbole"><b>'+sn+'</b> neue Symbole und Zeichen aus deinen Unterlagen. Jetzt lernen →</a>';
   if(mis.length)h+='<a class="alert" href="#/fristen/verpasst"><b>'+mis.length+'</b> verpasste '+(mis.length===1?'Frist':'Fristen')+'. Kurz anschauen →</a>';
   h+='<section class="sec"><h2>Deine 3 Häppchen <span class="chip '+(doneN===hs.length&&hs.length?'ok':'acc')+'">'+doneN+'/'+hs.length+'</span></h2>';
@@ -856,7 +884,7 @@ function vStudium(){
   if(st.kontakte)h+='<section class="sec"><details class="more list"><summary>Ansprechpartner</summary>'+st.kontakte.map(function(k){return '<div class="item"><span class="grow"><span class="t">'+esc(k.name)+'</span><div class="s">'+esc(k.text)+'</div></span></div>'}).join('')+'</details></section>';
   if(st.links)h+='<section class="sec"><details class="more list"><summary>Wichtige Links</summary>'+st.links.map(function(l){return '<a class="item" href="'+esc(l.url)+'" target="_blank" rel="noopener"><span class="grow">'+esc(l.label)+'</span><span class="chev">'+IC.chev+'</span></a>'}).join('')+'</details></section>';
   var th=S.theme||'auto';
-  h+='<section class="sec"><h2>Einstellungen</h2><div class="card"><div class="small muted">Design</div><div class="tabs" style="margin-top:6px">'+[['auto','Automatisch'],['light','Hell'],['dark','Dunkel']].map(function(t){return '<button class="'+(th===t[0]?'on':'')+'" data-act="theme" data-t="'+t[0]+'">'+t[1]+'</button>'}).join('')+'</div>'+
+  h+='<section class="sec"><h2>Einstellungen</h2><div class="card"><button class="btn sm ghost" data-act="tourreset" style="margin-bottom:10px">Erklärungen noch einmal zeigen</button><div class="small muted">Design</div><div class="tabs" style="margin-top:6px">'+[['auto','Automatisch'],['light','Hell'],['dark','Dunkel']].map(function(t){return '<button class="'+(th===t[0]?'on':'')+'" data-act="theme" data-t="'+t[0]+'">'+t[1]+'</button>'}).join('')+'</div>'+
    '</div>'+syncCard()+'<div class="card"><button class="btn sm ghost" data-act="privacy">Datenschutz und Hinweise</button><button class="btn sm ghost" data-act="terms">Nutzungsbedingungen</button><p class="small muted" style="margin:8px 0 0">© 2026 swiedzaid-star. Alle Rechte vorbehalten.</p></div>'+'<div class="card"><div class="small muted">Oder einmalig von Hand übertragen</div><div class="btns"><button class="btn sm soft" data-act="export">Fortschritt kopieren</button></div><textarea class="ans" id="imp" placeholder="Hier den kopierten Fortschritt einfügen"></textarea><div class="btns"><button class="btn sm ghost" data-act="import">Einfügen und übernehmen</button></div><div id="impmsg" class="small"></div></div></section>';
   return h+'<p class="foot">Stand der Inhalte: '+esc((D.meta||{}).built||'')+'</p></div></div>';
 }
@@ -1150,6 +1178,11 @@ document.addEventListener('click',function(e){
   if(a==='privacy'){sheet('<div class="story"><h2>Datenschutz und Hinweise</h2><h3 class="sh">Was ist das?</h3><div class="sp">Eine private, nicht kommerzielle Lern-App eines Studierenden für das eigene Studium. <b>Kein offizielles Angebot der RWTH Aachen</b> und nicht mit ihr verbunden. Alle Angaben ohne Gewähr; verbindlich sind immer RWTHonline, Moodle und die Lehrstühle.</div><h3 class="sh">Verantwortlich</h3><div class="sp">GitHub-Nutzer <b>swiedzaid-star</b>. Kontakt über das GitHub-Repository dieser App (github.com/swiedzaid-star/Studium-App-Daumen-Gedr-ckt, „Issues“).</div><h3 class="sh">Welche Daten anfallen</h3><div class="sp"><b>Hosting:</b> Die Seite liegt bei GitHub Pages (GitHub Inc., USA). GitHub verarbeitet beim Aufruf technisch nötige Daten wie die IP-Adresse in Server-Logs. Details: GitHub Privacy Statement (docs.github.com, „GitHub General Privacy Statement“).<br><b>Konto und Fortschritt:</b> Die Anmeldung und dein Lernfortschritt laufen über Supabase (Supabase Inc.; Server in Frankfurt, EU). Gespeichert werden E-Mail-Adresse, Passwort (verschlüsselt als Hash), Anmeldezeitpunkte und dein Fortschritt (erledigte Aufgaben, Karteikarten, Pläne, Einstellungen, Vorname, falls angegeben). Zusätzlich liegt eine Kopie im lokalen Speicher deines Browsers, damit die App offline funktioniert. Es gibt keine Registrierung, kein Tracking, keine Werbung und keine Schriften oder Skripte von fremden Servern.</div><h3 class="sh">Deine Rechte</h3><div class="sp">Auskunft, Berichtigung und Löschung deines Kontos samt Fortschritt jederzeit über den Kontakt oben; lokale Daten löschst du über die Browserdaten dieser Seite. Du hast außerdem die Rechte aus der DSGVO (Auskunft, Löschung, Beschwerde bei einer Datenschutz-Aufsichtsbehörde).</div><h3 class="sh">Inhalte</h3><div class="sp">Zusammenfassungen, Erklärungen und Aufgaben sind eigene Texte und eigene Aufgaben (teils angelehnt an Themen und Aufgabentypen der Lehrveranstaltungen). Es werden keine Vorlesungsfolien, Skripte oder Altklausuren der Lehrstühle wiedergegeben. © 2026 swiedzaid-star, alle Rechte vorbehalten (siehe Nutzungsbedingungen). Schriften: Plus Jakarta Sans und JetBrains Mono (SIL Open Font License), Formeln: MathJax (Apache License 2.0), lokal eingebunden.</div></div>',{title:'Datenschutz'});return}
   if(a==='close'){closeAll();rerender();return}
   if(a==='sessdone'){var pp=S.plans[t.getAttribute('data-x')];if(pp){pp.done[t.getAttribute('data-s')]=true;activity(10);save()}closeAll();toast('Abgehakt. Stark!');rerender();return}
+  if(a==='install'){if(INSTALL){INSTALL.prompt();INSTALL.userChoice.then(function(){INSTALL=null;rerender()})}return}
+  if(a==='installno'){S.ui=S.ui||{};S.ui.installHint=Date.now();save();rerender();return}
+  if(a==='tournext'){TOUR.i++;tourDraw();return}
+  if(a==='tourskip'){tourEnd();return}
+  if(a==='tourreset'){S.ui=S.ui||{};S.ui.tour={};save();toast('Erklärungen sind wieder an.');return}
   if(a==='pop'){stack.pop();drawSheet();return}
   if(a==='calm'){var dm=+t.getAttribute('data-d');UI.calM+=dm;if(UI.calM<0){UI.calM=11;UI.calY--}if(UI.calM>11){UI.calM=0;UI.calY++}rerender();return}
   if(a==='cald'){UI.calSel=t.getAttribute('data-d');var cd=pd(UI.calSel);UI.calY=cd.getFullYear();UI.calM=cd.getMonth();rerender();return}
