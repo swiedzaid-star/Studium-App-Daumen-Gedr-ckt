@@ -33,8 +33,8 @@ function stamp(){var now=Date.now();SECTIONS.forEach(function(sec){var o=S[sec]|
   Object.keys(o).forEach(function(k){var j=JSON.stringify(o[k]);if(sn[k]!==j){sn[k]=j;ts[k]=now}});
   Object.keys(sn).forEach(function(k){if(!(k in o)){delete sn[k];ts[k]=now}})});
   var ts=S._ts._s=S._ts._s||{};SCALARS.forEach(function(k){var j=JSON.stringify(S[k]);if(SNAP._s[k]!==j){SNAP._s[k]=j;ts[k]=now}})}
+S.xp=S.xp||0; /* vor snapInit, sonst gilt 0 auf einem frischen Gerät als Änderung und überschreibt beim Sync die echten XP */
 snapInit();
-S.xp=S.xp||0;
 function save(){stamp();S._mod=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(typeof syLater==='function')syLater()}
 if(S.theme)document.documentElement.setAttribute('data-theme',S.theme);
 
@@ -182,7 +182,7 @@ function route(keep){try{ensureFixPlans()}catch(e){}
   var focus=(v==='fach'&&MOD[p[1]]&&((p[2]==='vorlesungen'&&p[3])||p[2]==='karten'))||v==='symbole';document.body.classList.toggle('focus',!!focus);
   document.body.setAttribute('data-page',v==='fach'&&MOD[p[1]]?'fach':v);['mathe','stat','bsk','bure','gdm','mech','spa','studium'].forEach(function(k){document.body.classList.remove('pg-'+k)});if(v==='fach'&&MOD[p[1]])document.body.classList.add('pg-'+p[1]);if(v==='studium'||v==='symbole')document.body.classList.add('pg-studium');
   try{
-    document.body.classList.remove('pg-login');if(!loggedIn()||AUTH.recovery){main.innerHTML=vLogin();document.body.setAttribute('data-page','login');document.body.classList.add('pg-studium','pg-login');window.scrollTo(0,0);return}
+    document.body.classList.remove('pg-login');if(!loggedIn()||AUTH.recovery){main.innerHTML=vLogin();meldenBtn();document.body.setAttribute('data-page','login');document.body.classList.add('pg-studium','pg-login');window.scrollTo(0,0);return}
     if(v==='heute')html=vHeute();
     else if(v==='kalender')html=vKalender();
     else if(v==='fristen')html=vFristen(p[1]||'bald');
@@ -192,7 +192,7 @@ function route(keep){try{ensureFixPlans()}catch(e){}
     else if(v==='symbole')html=vSymbole();
     else html=vHeute();
   }catch(err){html='<div class="wrap"><p class="empty">Hier ist etwas schiefgelaufen: '+esc(err.message)+'</p></div>';console.error(err)}
-  main.innerHTML=html;animInit(main);
+  main.innerHTML=html;animInit(main);meldenBtn();
   $$('.nav a').forEach(function(a){a.classList.toggle('on',a.getAttribute('data-v')===(v==='fach'||v==='studium'||v==='symbole'?'faecher':v))});
   var nb=$('#navbadge'),mc=missed().length;if(nb){nb.textContent=mc;nb.hidden=!mc}
   window.scrollTo(0,keep?y:0);var tp=ts(main);if(keep&&y){ /* Lesestelle halten: nach dem Formelsatz verschieben sich Höhen, deshalb noch einmal hinspringen */ tp.then(function(){window.scrollTo(0,y)})}
@@ -289,7 +289,7 @@ function vHeute(){
   var h='<div class="wrap top"><div class="eyebrow">'+WDL[TODAY.getDay()]+', '+TODAY.getDate()+'. '+MON[TODAY.getMonth()]+'</div><h1>'+greet()+(S.name?', '+esc(S.name):'')+'</h1>'+(S.name?'':'<div class="card" style="margin-top:12px"><b>Wie heißt du?</b><p class="small muted" style="margin:4px 0 8px">Damit die App dich begrüßt. Wird mit deinen Geräten synchronisiert.</p><div class="btns"><input class="search" id="nm" placeholder="Vorname" autocomplete="given-name" style="flex:1;min-width:0"><button class="btn sm" data-act="setname">Speichern</button></div></div>')+
    '<div class="stats"><span class="stat"><span class="fire">'+IC.fire+'</span><b>'+st+'</b> '+(st===1?'Tag':'Tage')+' Serie</span><span class="stat">'+IC.bolt+'<b>Level '+lv.l+'</b><span class="bar sm"><span style="width:'+Math.round(lv.cur/lv.need*100)+'%"></span></span></span><button class="stat" data-act="theme" data-t="'+(S.theme==='dark'?'light':S.theme==='light'?'auto':'dark')+'" aria-label="Design wechseln">'+(S.theme==='dark'?'☾ Dunkel':S.theme==='light'?'☀ Hell':'◐ Auto')+'</button></div></div>';
   h+='<div class="wrap">';
-  h+=installCard();
+  h+=installCard();h+=testerCard();
   var sn=symNew().length;if(sn)h+='<a class="alert newsym" href="#/symbole"><b>'+sn+'</b> neue Symbole und Zeichen aus deinen Unterlagen. Jetzt lernen →</a>';
   if(mis.length)h+='<a class="alert" href="#/fristen/verpasst"><b>'+mis.length+'</b> verpasste '+(mis.length===1?'Frist':'Fristen')+'. Kurz anschauen →</a>';
   h+='<section class="sec"><h2>Deine 3 Häppchen <span class="chip '+(doneN===hs.length&&hs.length?'ok':'acc')+'">'+doneN+'/'+hs.length+'</span></h2>';
@@ -514,19 +514,39 @@ function vFormeln(m){
 }
 document.addEventListener('input',function(e){if(e.target.id!=='fsearch')return;var q=e.target.value.trim().toLowerCase();
   $$('.fgroup',main).forEach(function(g){var any=false;$$('.fxcard',g).forEach(function(c){var hit=!q||c.textContent.toLowerCase().indexOf(q)>=0;c.hidden=!hit;if(hit)any=true});g.hidden=!any;if(q)g.querySelector('details').open=true})});
-function openFormula(id){var f=FORM[id];if(!f)return;
-  var h='<div class="'+cls(f.mod)+'"><div class="eyebrow">'+esc(SHORT[f.mod])+' · Formel</div><h2 style="margin-top:4px">'+esc(f.name)+'</h2>'+
-   '<div class="fxbig">\\['+texSafe(f.tex)+'\\]</div>'+(f.what?'<p class="lead">'+f.what+'</p>':'')+
-   '<h3 style="margin-top:16px">Die Bausteine <span class="chip acc">antippen</span></h3><div class="list parts">'+(f.parts||[]).map(function(p,i){var s=p.ref&&D.symbols[p.ref];
-     return '<button class="item" data-act="part" data-f="'+esc(f.id)+'" data-i="'+i+'"><span class="psym">'+mx(p.sym)+'</span><span class="grow"><span class="t">'+esc(p.name)+(p.unit&&p.unit!=='–'?' <span class="chip">'+esc(p.unit)+'</span>':'')+'</span><div class="s">'+(p.d||'')+'</div>'+(p.effect?'<div class="s eff">'+esc(p.effect)+'</div>':'')+'</span>'+(s?'<span class="chev">'+IC.chev+'</span>':'')+'</button>'}).join('')+'</div>'+
-   (f.unit?'<p class="small" style="margin-top:10px"><b>Einheit:</b> '+f.unit+'</p>':'')+
-   (f.ex?'<div class="card" style="margin-top:12px"><b>Beispiel:</b> '+f.ex+'</div>':'')+'</div>';
-  sheet(h,{title:'Formel'});
+/* ---------- Formel-Fenster (SCHEMA NACHTRAG 6) ----------
+   player:true → Schritt-Player aus den Feldern (Wozu → je Baustein → Rechnung → Fehler → Ergebnis), mit „Als Text“.
+   sonst → kompakte Textkarte. Fehlende Felder werden weggelassen, alte Daten bleiben gültig. */
+function unitOk(u){return u&&!/^\s*[–-]?\s*$/.test(u)}
+function hlIds(p){return p&&p.hl?(Array.isArray(p.hl)?p.hl:[p.hl]):[]}
+function formulaAnim(f){var H=[];(f.parts||[]).forEach(function(p){hlIds(p).forEach(function(x){if(H.indexOf(x)<0)H.push(x)})});
+  var dim=function(keep){var o={};H.forEach(function(x){o[x]={opacity:keep.indexOf(x)>=0?1:.25}});return o},all=dim(H),st=[];
+  st.push({t:(f.what?'<b>'+f.what+'</b>':'')+(f.why?(f.what?'<br>':'')+'<b>Wozu?</b> '+f.why:''),f:f.tex,set:all});
+  (f.parts||[]).forEach(function(p){st.push({t:'<b>Baustein: '+esc(p.name)+'</b> '+mx(p.sym)+'<br>'+(p.d||'')+(p.effect?'<br><span class="muted">Wirkung: '+esc(p.effect)+'</span>':'')+(unitOk(p.unit)?'<br><span class="muted">Einheit: '+esc(p.unit)+'</span>':''),set:dim(hlIds(p))})});
+  (f.steps||[]).forEach(function(x,k){st.push({t:'<b>Rechnen '+(k+1)+'/'+f.steps.length+':</b> '+(x.t||'')+(x.why?'<span class="why">Warum: '+x.why+'</span>':''),f:x.f||undefined,set:all})});
+  (f.mistakes||[]).forEach(function(m){st.push({t:'<b>Typischer Fehler</b><br><span class="bad-x">✗</span> '+m,set:all})});
+  st.push({t:'<b>Ergebnis</b>'+(unitOk(f.unit)?'<br>Einheit: '+f.unit:'')+(f.what?'<br><span class="muted">'+f.what+'</span>':''),f:f.tex,set:all});
+  return {id:'fx-'+f.id,title:f.name,svg:f.svg||'',steps:st}}
+function lectureAnim(mod,aid){var r=null;((MOD[mod]||{}).lectures||[]).forEach(function(l){(l.anims||[]).forEach(function(a){if(a.id===aid)r=a})});return r}
+function partsList(f){return '<div class="list parts">'+(f.parts||[]).map(function(p,i){var s=p.ref&&D.symbols[p.ref];
+     return '<button class="item" data-act="part" data-f="'+esc(f.id)+'" data-i="'+i+'"><span class="psym">'+mx(p.sym)+'</span><span class="grow"><span class="t">'+esc(p.name)+(unitOk(p.unit)?' <span class="chip">'+esc(p.unit)+'</span>':'')+'</span><div class="s">'+(p.d||'')+'</div>'+(p.effect?'<div class="s eff">'+esc(p.effect)+'</div>':'')+'</span>'+(s||p.svg?'<span class="chev">'+IC.chev+'</span>':'')+'</button>'}).join('')+'</div>'}
+function openFormula(id){var f=FORM[id];if(!f)return;var la=f.anim&&lectureAnim(f.mod,f.anim);
+  var h='<div class="'+cls(f.mod)+' fxsheet"><div class="eyebrow">'+esc(SHORT[f.mod])+' · Formel</div><h2 style="margin-top:4px">'+esc(f.name)+'</h2>';
+  if(f.player===true&&(f.why||(f.steps||[]).length||(f.parts||[]).length)){
+    h+=animHtml(formulaAnim(f),{textBtn:true,notitle:true})+'<h3 class="sh">Die Bausteine <span class="chip acc">antippen</span></h3>'+partsList(f)+(la?'<h3 class="sh">Als Animation</h3>'+animHtml(la):'')}
+  else{
+    h+='<div class="fxbig">\\['+texSafe(f.tex)+'\\]</div>'+(f.what?'<p class="lead">'+f.what+'</p>':'')+
+     (f.why?'<h3 class="sh">Wozu?</h3><div class="sp">'+f.why+'</div>':'')+(f.svg?'<figure class="fig">'+f.svg+'</figure>':'')+(la?animHtml(la):'')+
+     '<h3 class="sh">Die Bausteine <span class="chip acc">antippen</span></h3>'+partsList(f)+
+     ((f.steps||[]).length?'<h3 class="sh">So rechnest du</h3><ol class="fsteps">'+f.steps.map(function(x){return '<li>'+(x.t||'')+(x.f?'<div class="fxs">\\['+texSafe(x.f)+'\\]</div>':'')+(x.why?'<span class="why">Warum: '+x.why+'</span>':'')+'</li>'}).join('')+'</ol>':(f.ex?'<div class="card" style="margin-top:12px"><b>Beispiel:</b> '+f.ex+'</div>':''))+
+     ((f.mistakes||[]).length?'<h3 class="sh">Typische Fehler</h3><ul class="fmist">'+f.mistakes.map(function(m){return '<li><span class="bad-x">✗</span> '+m+'</li>'}).join('')+'</ul>':'')+
+     (unitOk(f.unit)?'<p class="small" style="margin-top:10px"><b>Einheit:</b> '+f.unit+'</p>':'')}
+  sheet(h+'</div>',{title:'Formel'});
 }
 function openPart(fid,i){var f=FORM[fid],p=f&&f.parts[i];if(!p)return;if(p.ref&&D.symbols[p.ref])openSymbol(p.ref,p);
-  else sheet('<div class="symcard"><div class="symbig">'+mx(p.sym)+'</div><h2>'+esc(p.name)+'</h2><div class="card ctx"><b>In dieser Formel:</b> '+(p.d||'')+'</div>'+(p.unit?'<div class="card"><b>Einheit:</b> '+esc(p.unit)+'</div>':'')+(p.effect?'<div class="card"><b>Wirkung:</b> '+esc(p.effect)+'</div>':'')+(f.unit?'<div class="card"><b>Einheit der Formel:</b> '+f.unit+'</div>':'')+'</div>',{title:'Baustein'})}
+  else sheet('<div class="symcard"><div class="symbig">'+mx(p.sym)+'</div>'+(p.svg?'<div class="psvg">'+p.svg+'</div>':'')+'<h2>'+esc(p.name)+'</h2><div class="card ctx"><b>In dieser Formel:</b> '+(p.d||'')+'</div>'+(unitOk(p.unit)?'<div class="card"><b>Einheit:</b> '+esc(p.unit)+'</div>':'')+(p.effect?'<div class="card"><b>Wirkung:</b> '+esc(p.effect)+'</div>':'')+(unitOk(f.unit)?'<div class="card"><b>Einheit der Formel:</b> '+f.unit+'</div>':'')+'</div>',{title:'Baustein'})}
 function openSymbol(id,ctx){var s=D.symbols[id];if(!s)return;
-  var h='<div class="symcard"><div class="symbig">'+mx(s.tex)+'</div><h2>'+esc(s.name)+'</h2><p class="muted">'+(s.say?'gesprochen: „'+esc(s.say)+'“ · ':'')+esc(s.group)+'</p>'+(s.mod&&!ctx?(s.unit&&s.unit!=='–'?'<div class="card"><b>Einheit:</b> '+esc(s.unit)+'</div>':'')+(s.effect?'<div class="card"><b>Wirkung:</b> '+esc(s.effect)+'</div>':''):'')+
+  var h='<div class="symcard"><div class="symbig">'+mx(s.tex)+'</div>'+(ctx&&ctx.svg?'<div class="psvg">'+ctx.svg+'</div>':'')+'<h2>'+esc(s.name)+'</h2><p class="muted">'+(s.say?'gesprochen: „'+esc(s.say)+'“ · ':'')+esc(s.group)+'</p>'+(s.mod&&!ctx?(s.unit&&s.unit!=='–'?'<div class="card"><b>Einheit:</b> '+esc(s.unit)+'</div>':'')+(s.effect?'<div class="card"><b>Wirkung:</b> '+esc(s.effect)+'</div>':''):'')+
    (ctx?'<div class="card ctx"><b>In dieser Formel:</b> '+esc(ctx.name)+(ctx.d?'. '+ctx.d:'')+(ctx.unit&&ctx.unit!=='–'?'<br><b>Einheit:</b> '+esc(ctx.unit):'')+(ctx.effect?'<br><b>Wirkung:</b> '+esc(ctx.effect):'')+'</div>':'')+
    '<div class="card"><b>Allgemein:</b> '+texSafe(s.d)+'</div>'+(s.val?'<div class="card"><b>Wert:</b> <span class="kpi">'+texSafe(s.val)+'</span></div>':'')+(s.ex?'<div class="card"><b>Beispiel:</b> '+texSafe(s.ex)+'</div>':'')+'</div>';
   sheet(h,{title:'Symbol'});
@@ -620,7 +640,7 @@ function vKarten(m){
 }
 function openTerm(key,deck){var t=TERM[key];if(!t)return;
   var html='<div class="'+cls(t.mod)+'"><div class="flip" data-act="flip"><div class="inner"><div class="face front"><div class="w">'+t.t+'</div>'+(t.sym?'<div class="sy">'+mx(t.sym)+'</div>':'')+'<div class="hint">Tippen zum Umdrehen</div></div>'+
-    '<div class="face back"><div class="w2">'+t.t+(t.sym?' <span class="sy">'+mx(t.sym)+'</span>':'')+'</div><div>'+t.d+'</div>'+(t.ex?'<div class="exbox"><b>Beispiel:</b> '+t.ex+'</div>':'')+(t.viz?'<div class="viz">'+t.viz+'</div>':'')+'</div></div></div></div>';
+    '<div class="face back"><div class="w2">'+t.t+(t.sym?' <span class="sy">'+mx(t.sym)+'</span>':'')+'</div><div>'+t.d+'</div>'+(t.ex?'<div class="exbox"><b>Beispiel:</b> '+t.ex+'</div>':'')+(t.vs?'<div class="exbox vs"><b>Nicht verwechseln:</b> '+t.vs+'</div>':'')+(t.viz?'<div class="viz">'+t.viz+'</div>':'')+'</div></div></div></div>';
   if(deck)return html;
   sheet(html+'<div class="btns"><button class="btn soft" data-act="cardgrade" data-k="'+esc(key)+'" data-g="1">Wusste ich</button><button class="btn ghost" data-act="cardgrade" data-k="'+esc(key)+'" data-g="0">Nochmal üben</button></div>',{title:'Karteikarte'});
 }
@@ -1093,7 +1113,7 @@ var stack=[];
 function sheet(html,o){o=o||{};if(o.replace&&stack.length)stack[stack.length-1]={html:html,title:o.title};else{if(stack.length)stack[stack.length-1].scroll=layer.scrollTop;stack.push({html:html,title:o.title})}drawSheet()}
 function drawSheet(){var top=stack[stack.length-1];if(!top){layer.hidden=true;document.body.classList.remove('noscroll');return}
   layer.hidden=false;document.body.classList.add('noscroll');
-  layer.innerHTML='<div class="lhead"><div class="wrap"><button class="x" data-act="'+(stack.length>1?'pop':'close')+'" aria-label="'+(stack.length>1?'Zurück':'Schließen')+'">'+(stack.length>1?IC.back:IC.x)+'</button><b class="grow">'+esc(top.title||'')+'</b></div></div><div class="wrap lbody">'+top.html+'</div>';
+  layer.innerHTML='<div class="lhead"><div class="wrap"><button class="x" data-act="'+(stack.length>1?'pop':'close')+'" aria-label="'+(stack.length>1?'Zurück':'Schließen')+'">'+(stack.length>1?IC.back:IC.x)+'</button><b class="grow">'+esc(top.title||'')+'</b></div></div><div class="wrap lbody">'+top.html+'</div>';animInit(layer);
   /* Zurück zu einer vorherigen Karte: an der alten Lesestelle weitermachen (auch nach dem Formelsatz) */
   var y=top.scroll||0;layer.scrollTop=y;ts(layer).then(function(){if(y)layer.scrollTop=y})}
 function closeAll(){stack=[];clearInterval(focusIv);drawSheet()}
@@ -1105,17 +1125,17 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'&&stack.lengt
 var ANIM={},ANIMRUN=null,ANIMKEY='studium-anim';
 function animPref(){var p={};try{p=JSON.parse(localStorage.getItem(ANIMKEY))||{}}catch(e){}if(p.mode!=='play')p.mode='step';if([.5,1,2].indexOf(p.tempo)<0)p.tempo=1;return p}
 function animPrefSet(k,v){var p=animPref();p[k]=v;try{localStorage.setItem(ANIMKEY,JSON.stringify(p))}catch(e){}}
-function animHtml(a){ANIM[a.id]=a;var n=(a.steps||[]).length,tp=animPref().tempo;
+function animHtml(a,o){o=o||{};ANIM[a.id]=a;var n=(a.steps||[]).length,tp=animPref().tempo;
   var tempo=[.5,1,2].map(function(t){return '<button class="chipbtn'+(t===tp?' on':'')+'" data-aa="tempo" data-t="'+t+'" aria-pressed="'+(t===tp)+'">'+(t===.5?'½':t)+'×</button>'}).join('');
   return '<figure class="card anim" tabindex="0" data-anim="'+esc(a.id)+'" data-st="step" aria-label="'+esc(a.title||'Animation')+', '+n+' Schritte. Pfeiltasten: Schritt vor und zurück, Leertaste: abspielen oder anhalten.">'+
-   '<div class="ft">'+esc(a.title||'')+'</div><div class="anim-stage">'+a.svg+'</div>'+
+   (o.notitle?'':'<div class="ft">'+esc(a.title||'')+'</div>')+'<div class="anim-stage">'+(a.svg||'')+'</div>'+
    '<div class="anim-bar" aria-hidden="true"><i></i></div>'+
    '<div class="anim-text" aria-live="polite">'+(a.steps||[]).map(function(s,i){return '<div class="anim-st'+(i?'':' on')+'"><span class="anim-no">'+(i+1)+'</span><div class="anim-tx">'+s.t+(s.f?'<div class="anim-f">'+mx(s.f)+'</div>':'')+'</div></div>'}).join('')+'</div>'+
    '<div class="anim-ctl">'+
     '<div class="anim-g g-step"><button class="btn sm soft" data-aa="prev" aria-label="Schritt zurück">'+IC.back+'</button><span class="anim-cnt"><b>1</b>/'+n+'</span><button class="btn sm" data-aa="next" aria-label="Nächster Schritt">Weiter '+IC.chev+'</button><button class="btn sm ghost" data-aa="play">'+IC.play+' Alles abspielen</button></div>'+
     '<div class="anim-g g-play"><button class="btn sm soft" data-aa="pause">❚❚ Pause</button><span class="anim-cnt"><b>1</b>/'+n+'</span><span class="anim-tempo" role="group" aria-label="Tempo">'+tempo+'</span></div>'+
     '<div class="anim-g g-end"><button class="btn sm" data-aa="again">↻ Noch einmal</button><button class="btn sm soft" data-aa="steps">Schrittweise ansehen</button></div>'+
-   '</div>'+(a.caption?'<figcaption>'+a.caption+'</figcaption>':'')+'</figure>'}
+   '</div>'+(o.textBtn?'<div class="anim-x"><button class="btn sm ghost" data-aa="text" aria-pressed="false">Als Text</button></div>':'')+(a.caption?'<figcaption>'+a.caption+'</figcaption>':'')+'</figure>'}
 function animTf(s){return String(s).replace(/(translate|rotate|scale)\(([^)]*)\)/g,function(_,f,arg){var n=arg.trim().split(/[\s,]+/).map(Number);
   if(f==='translate')return 'translate('+n[0]+'px,'+(n[1]||0)+'px)';
   if(f==='scale')return 'scale('+n[0]+','+(n.length>1?n[1]:n[0])+')';
@@ -1156,11 +1176,53 @@ document.addEventListener('click',function(e){var b=e.target.closest&&e.target.c
   else if(w==='play'||w==='again'){animPrefSet('mode','play');animPlay(fig)}
   else if(w==='pause'){animStop('step');animPrefSet('mode','step')}
   else if(w==='steps'){animStop();fig.setAttribute('data-st','step');animPrefSet('mode','step');animShow(fig,0)}
+  else if(w==='text'){animStop('step');var on=!fig.classList.contains('astext');fig.classList.toggle('astext',on);b.setAttribute('aria-pressed',on);b.textContent=on?'Als Schritte':'Als Text';
+    var n2=ANIM[fig.getAttribute('data-anim')].steps.length;animShow(fig,on?n2-1:0,true);if(on)$$('.anim-st',fig).forEach(function(d){d.classList.add('on')})}
   else if(w==='tempo'){var t=+b.getAttribute('data-t');animPrefSet('tempo',t);$$('[data-aa=tempo]',fig).forEach(function(x){var on=x===b;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on)});if(ANIMRUN&&ANIMRUN.fig===fig)animPlay(fig)}});
 document.addEventListener('keydown',function(e){var fig=e.target.closest&&e.target.closest('figure.anim');if(!fig||e.altKey||e.ctrlKey||e.metaKey)return;var a=ANIM[fig.getAttribute('data-anim')];if(!a)return;var k=+fig.getAttribute('data-k')||0;
   if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();animStop('step');animShow(fig,k+(e.key==='ArrowRight'?1:-1))}
   else if(e.key==='Home'||e.key==='End'){e.preventDefault();animStop('step');animShow(fig,e.key==='Home'?0:a.steps.length-1)}
   else if((e.key===' '||e.key==='Spacebar')&&e.target===fig){e.preventDefault();if(ANIMRUN&&ANIMRUN.fig===fig){animStop('step');animPrefSet('mode','step')}else{animPrefSet('mode','play');animPlay(fig)}}});
+
+/* ================= Melden (Fehler / Idee / Gefällt mir nicht) mit Momentaufnahme =================
+   Bild: html-to-image (site/vendor, MIT) zeichnet den sichtbaren Ausschnitt als SVG-foreignObject in ein Canvas → PNG.
+   Passwortfelder, Toasts und der Knopf selbst sind nie auf dem Bild; auf der Anmeldeseite gibt es keinen Knopf.
+   Senden: Supabase Edge Function 'feedback' (prüft Anmeldung, Rolle, 10/Stunde, 2 MB) → Commit nach feedback/ im privaten Repo. */
+var MELD={png:null,art:'fehler'};
+/* Nur diese Stile kopieren: alle ~400 je Element dauerten auf einer Vorlesungsseite (≈6000 Elemente) 33 s statt 2 s */
+var SNAPSTYLE='display position top right bottom left z-index width height min-width min-height max-width max-height box-sizing margin-top margin-right margin-bottom margin-left padding-top padding-right padding-bottom padding-left flex-direction flex-wrap flex-grow flex-shrink flex-basis align-items align-self align-content justify-content justify-items gap row-gap column-gap grid-template-columns grid-template-rows grid-column-start grid-column-end grid-row-start grid-row-end color background-color background-image background-size background-position background-repeat background-clip -webkit-background-clip -webkit-text-fill-color border-top-width border-right-width border-bottom-width border-left-width border-top-style border-right-style border-bottom-style border-left-style border-top-color border-right-color border-bottom-color border-left-color border-top-left-radius border-top-right-radius border-bottom-left-radius border-bottom-right-radius box-shadow opacity transform transform-origin font-family font-size font-weight font-style font-variant-numeric line-height letter-spacing text-align text-decoration-line text-decoration-color text-transform text-overflow white-space word-break overflow-wrap overflow-x overflow-y visibility vertical-align stroke-dasharray stroke-dashoffset list-style-type object-fit outline-style'.split(' ');
+function meldenBtn(){var b=document.getElementById('meldenbtn'),show=loggedIn()&&!AUTH.recovery;
+  document.body.classList.toggle('has-melden',show);
+  if(!show){if(b)b.remove();return}
+  if(!b){b=document.createElement('button');b.id='meldenbtn';b.className='meldenbtn';b.setAttribute('data-act','melden');b.setAttribute('aria-label','Fehler oder Idee melden');
+    b.innerHTML='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V4h11l-1.5 4L15 12H4"/></svg><span>Melden</span>';document.body.appendChild(b)}}
+function loadScript(src){return new Promise(function(ok,bad){if(document.querySelector('script[data-src="'+src+'"]')&&window.htmlToImage)return ok();var sc=document.createElement('script');sc.src=src;sc.setAttribute('data-src',src);sc.onload=function(){ok()};sc.onerror=function(){bad(new Error('Laden fehlgeschlagen'))};document.head.appendChild(sc)})}
+function snapBg(){var c=[document.body,document.documentElement].map(function(e){return getComputedStyle(e).backgroundColor}).filter(function(x){return x&&!/rgba\(0, 0, 0, 0\)|transparent/.test(x)})[0];
+  return c||getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()||'#ffffff'}
+function snapshot(){var w=innerWidth,h=innerHeight,x=scrollX,y=scrollY;
+  return loadScript('vendor/html-to-image/html-to-image.js').then(function(){
+    var opt=function(pr){return {width:w,height:h,pixelRatio:pr,cacheBust:false,skipAutoScale:true,includeStyleProperties:SNAPSTYLE,backgroundColor:snapBg(),
+      style:{transform:'translate('+(-x)+'px,'+(-y)+'px)',transformOrigin:'0 0'},
+      filter:function(n){if(!n||!n.tagName)return true;if(n.id==='meldenbtn'||n.id==='layer'||n.tagName==='MJX-ASSISTIVE-MML'||(n.classList&&(n.classList.contains('toast')||n.classList.contains('nav'))))return false; /* feste Leiste verrutscht beim Verschieben → weglassen */ /* Vorlese-Zwilling der Formeln nicht mitzeichnen */return !(n.tagName==='INPUT'&&/password/i.test(n.type))}}};
+    var pr=Math.min(window.devicePixelRatio||1,2);
+    return htmlToImage.toPng(document.body,opt(pr)).then(function(png){return png.length*.75>1.9e6?htmlToImage.toPng(document.body,opt(1)):png})})}
+function meldenSheet(){$$('.toast').forEach(function(t){t.remove()});var arts=[['fehler','Fehler'],['idee','Idee'],['gefaellt-nicht','Gefällt mir nicht']];
+  sheet('<div class="story melden"><h2>Melden</h2><p class="small muted">Was ist passiert, was fehlt dir, was gefällt dir nicht? Geht direkt an den Entwickler der App.</p>'+
+   '<div class="chips" role="radiogroup" aria-label="Art">'+arts.map(function(a){return '<button class="chipbtn'+(MELD.art===a[0]?' on':'')+'" role="radio" aria-checked="'+(MELD.art===a[0])+'" data-act="meldart" data-a="'+a[0]+'">'+a[1]+'</button>'}).join('')+'</div>'+
+   '<label class="mfield"><span>Beschreibung (Pflicht)</span><textarea id="meldtext" rows="5" maxlength="5000" placeholder="z. B. Bei Aufgabe 3 kommt nach „Prüfen“ nichts."></textarea></label>'+
+   (MELD.png?'<label class="toggle"><input type="checkbox" id="meldbild" checked> Bild der Seite mitschicken</label><img class="meldimg" alt="Bild der Seite, wie es mitgeschickt wird" src="'+MELD.png+'">':'<p class="small muted">Bild der Seite war auf diesem Gerät nicht möglich – die Meldung geht ohne Bild.</p>')+
+   '<div class="btns"><button class="btn" id="meldsend" data-act="meldsend">Senden</button></div></div>',{title:'Melden'});
+  setTimeout(function(){var t=document.getElementById('meldtext');if(t)t.focus()},50)}
+function meldenStart(){var b=document.getElementById('meldenbtn');if(b)b.disabled=true;MELD.png=null;toast('Bild der Seite wird erstellt …');
+  snapshot().then(function(png){MELD.png=png},function(){MELD.png=null}).then(function(){if(b)b.disabled=false;meldenSheet()})}
+function meldenSend(){var txt=(($('#meldtext')||{}).value||'').trim(),btn=$('#meldsend');if(txt.length<3){toast('Bitte kurz beschreiben, was los ist.');return}
+  var withImg=MELD.png&&$('#meldbild')&&$('#meldbild').checked,body={art:MELD.art,text:txt,route:location.hash||'#/heute',ua:navigator.userAgent,screen:innerWidth+'x'+innerHeight,
+    version:((document.querySelector('script[src*="boot.js"]')||{}).src||'').replace(/.*v=/,''),png:withImg?MELD.png:null};
+  if(btn){btn.disabled=true;btn.textContent='Wird gesendet …'}
+  authReady().then(function(){return fetch(SB_URL+'/functions/v1/feedback',{method:'POST',headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+AUTH.access_token},body:JSON.stringify(body)})})
+   .then(function(r){return r.json().catch(function(){return {}}).then(function(j){if(!r.ok)throw new Error(j.error||('Fehler '+r.status));return j})})
+   .then(function(){MELD.png=null;closeAll();toast('Danke! Deine Meldung ist angekommen.')},function(e){if(btn){btn.disabled=false;btn.textContent='Senden'}
+     toast(/Failed to fetch|NetworkError/.test(String(e.message))?'Kein Internet – bitte später noch einmal.':String(e.message||e))})}
 
 /* ================= Klicks ================= */
 document.addEventListener('change',function(e){var t=e.target;if(t&&t.getAttribute&&t.getAttribute('data-act')==='grp'){S.ui.grp=S.ui.grp||{};S.ui.grp[t.getAttribute('data-k')]=t.value;save();rerender()}});
@@ -1220,6 +1282,10 @@ document.addEventListener('click',function(e){
     if(!cm){toast('Bitte deine E-Mail zur Bestätigung eintragen.');return}
     if(!acct||cm!==acct){logout();toast('Dieser Link gehört nicht zu deinem Konto.');rerender();return}} /* Befund 6b: fremder Link → Sitzung verwerfen */
   if(a==='pwset'||a==='pwchange'){var p1=a==='pwset'?($('#pw1').value||''):prompt('Neues Passwort (mind. 12 Zeichen, Groß/Klein, Zahl, Sonderzeichen):'),p2=a==='pwset'?($('#pw2').value||''):p1;if(p1==null)return;if(p1.length<12){toast('Mindestens 12 Zeichen.');return}if(p1!==p2){toast('Die Passwörter stimmen nicht überein.');return}setPassword(p1).then(function(){AUTH.recovery=false;authSave();toast('Passwort gespeichert.');rerender()}).catch(function(e){toast('Fehler: '+e.message)});return}
+  if(a==='melden'){meldenStart();return}
+  if(a==='meldart'){MELD.art=t.getAttribute('data-a');$$('[data-act=meldart]',layer).forEach(function(x){var on=x===t;x.classList.toggle('on',on);x.setAttribute('aria-checked',on)});return}
+  if(a==='meldsend'){meldenSend();return}
+  if(a==='testerok'){S.ui.testerOk=Date.now();save();rerender();return}
   if(a==='syncnow'){syncNow(false).then(function(){toast(SY.err?'Problem: '+SY.err:'Synchronisiert.')});return}
   if(a==='logout'){logout();toast('Abgemeldet.');rerender();return}
   if(a==='nach'){runNach(t.getAttribute('data-l'));return}
@@ -1301,13 +1367,14 @@ function setPassword(pw){return authReady().then(function(){return sbAuthed('/au
 function tsOf(T,sec,k){return (T&&T[sec]&&T[sec][k])||0}
 function mergeByTs(L,R){var out={},LT=L._ts||{},RT=R._ts||{},TS={};
   SECTIONS.forEach(function(sec){var a=L[sec]||{},b=R[sec]||{},o={},t={};Object.keys(a).concat(Object.keys(b)).forEach(function(k){if(k in o)return;var ta=tsOf(LT,sec,k),tb=tsOf(RT,sec,k);var useB=tb>ta||(tb===ta&&!(k in a)&&ta===0);if(useB){if((k in b)&&b[k]!==undefined)o[k]=b[k]}else if((k in a)&&a[k]!==undefined)o[k]=a[k];t[k]=Math.max(ta,tb)});out[sec]=o;TS[sec]=t});
-  var sa=LT._s||{},sb=RT._s||{},st={};SCALARS.forEach(function(k){var ta=sa[k]||0,tb=sb[k]||0;out[k]=tb>ta||(tb===ta&&(k in R)&&!(k in L))?R[k]:L[k];st[k]=Math.max(ta,tb)});TS._s=st;
+  var sa=LT._s||{},sb=RT._s||{},st={};SCALARS.forEach(function(k){var ta=sa[k]||0,tb=sb[k]||0;out[k]=tb>ta||(tb===ta&&(k in R)&&!(k in L))?R[k]:L[k];st[k]=Math.max(ta,tb)});
+  out.xp=Math.max(L.xp||0,R.xp||0); /* XP gehen nie verloren: der höhere Stand gewinnt, egal welcher Stempel */ TS._s=st;
   out._ts=TS;out._v=2;out._mod=Math.max(L._mod||0,R._mod||0);return out}
 function applyRemote(R){S=R;SECTIONS.forEach(function(k){S[k]=S[k]||{}});S.xp=S.xp||0;S._ts=S._ts||{};snapInit();
   try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(S.theme)document.documentElement.setAttribute('data-theme',S.theme);if(layer.hidden)rerender()}
 var syBusy=false,syTimer=null;
 function syncNow(quiet){if(!loggedIn()||syBusy||!navigator.onLine)return Promise.resolve();syBusy=true;var uid=AUTH.user&&AUTH.user.id;
-  return authReady().then(function(){return sbAuthed('/rest/v1/progress?select=data,updated_at&user_id=eq.'+uid)}).then(function(rows){
+  return authReady().then(roleFetch).then(function(){return sbAuthed('/rest/v1/progress?select=data,updated_at&user_id=eq.'+uid)}).then(function(rows){
       var R=rows&&rows[0]&&rows[0].data,push=false,fp=JSON.stringify(S._ts||{});stamp();
       if(R&&R._v===2){var M=mergeByTs(S,R);var changedLocal=JSON.stringify(M)!==JSON.stringify(S);var changedRemote=JSON.stringify(M)!==JSON.stringify(R);if(changedLocal){applyRemote(M);if(!quiet)toast('Stand vom anderen Gerät übernommen.')}push=changedRemote}
       else if(R&&!R._v){var M2=mergeByTs(S,Object.assign({},R,{_ts:{}}));applyRemote(M2);push=true}
@@ -1316,6 +1383,15 @@ function syncNow(quiet){if(!loggedIn()||syBusy||!navigator.onLine)return Promise
       if(push)return sbAuthed('/rest/v1/progress',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({user_id:uid,data:S,updated_at:new Date().toISOString()})})})
   .catch(function(e){if(!loggedIn()){SY.err=SY.err||'Anmeldung abgelaufen, bitte neu anmelden'}else SY.err=(e&&e.status===401)?'Anmeldung abgelaufen, bitte neu anmelden':(e&&/Failed to fetch|NetworkError/.test(String(e.message)))?'kein Internet oder Server nicht erreichbar':String(e.message||e);if(e&&e.status===401&&loggedIn())authDrop();sySave()})
   .then(function(){syBusy=false;var el=$('#systat');if(el)el.innerHTML=syStatus();checkHandoff()})}
+/* Rolle aus public.profiles (owner|tester, docs/tester-einrichtung.md). Fehlt die Tabelle noch (vor dem SQL), läuft alles wie bisher.
+   Konto ohne Profil: kein Sync, klare Meldung (RLS würde ohnehin ablehnen). */
+function roleFetch(){var uid=AUTH.user&&AUTH.user.id;return sbAuthed('/rest/v1/profiles?select=role&user_id=eq.'+uid).then(function(rows){
+    var r=rows&&rows[0]&&rows[0].role;if(SY.role!==r){SY.role=r||'';sySave();if(layer.hidden&&/^#\/heute|^$/.test(location.hash))rerender()}
+    if(r==='owner'&&!S.ui.xpfix1){S.ui.xpfix1=1;if((S.xp||0)<1060){S.xp=1060;toast('Level 6 wiederhergestellt.')}save()} /* einmalig: XP nach dem Sync-Fehler vom 26.10. zurück (Level 6 = 1060 XP) */
+    if(!r){var e=new Error('Dein Konto ist noch nicht freigeschaltet. Bitte melde dich beim Inhaber der App.');e.status=403;throw e}},
+  function(e){if(e&&(e.status===404||/PGRST205|42P01|does not exist|schema cache/i.test(String(e.message))))return; /* Tabelle noch nicht angelegt */throw e})}
+function testerCard(){if(SY.role!=='tester'||S.ui.testerOk)return '';
+  return '<div class="card tester" style="margin-top:12px"><b>Du bist Tester</b><p class="small" style="margin:6px 0">Du nutzt eine frühe Version der App. Wenn dir ein Fehler auffällt, du eine Idee hast oder dir etwas nicht gefällt: tippe unten rechts auf <b>Melden</b>. Die Meldung geht mit einem Bild der Seite direkt an den Entwickler.</p><p class="small muted" style="margin:0 0 8px">Dein Lernstand wird nur für dein Konto gespeichert und zwischen deinen Geräten abgeglichen.</p><button class="btn sm" data-act="testerok">Verstanden</button></div>'}
 function syLater(){if(!loggedIn())return;clearTimeout(syTimer);syTimer=setTimeout(function(){syncNow(true)},4000)}
 function syStatus(){if(!loggedIn())return 'Nicht angemeldet';if(SY.err)return '<span class="badc">Problem: '+esc(SY.err)+'</span>';if(!SY.last)return 'Angemeldet, noch nicht synchronisiert';var d=new Date(SY.last);return '<span class="okc">Synchron</span> · zuletzt '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' Uhr'}
 function syncCard(){var u=AUTH.user||{};return '<div class="card"><b>Konto und Geräte-Sync</b><p class="small" style="margin:6px 0">Angemeldet als <b>'+esc(u.email||'')+'</b></p><p class="small" id="systat" style="margin:6px 0">'+syStatus()+'</p><p class="small muted">Fortschritt, Pläne und Einstellungen gleichen sich automatisch ab: beim Öffnen, alle 2 Minuten und kurz nach jeder Änderung. Ohne Internet läuft alles weiter und wird später nachgetragen.</p><div class="btns"><button class="btn sm" data-act="syncnow">Jetzt synchronisieren</button><button class="btn sm ghost" data-act="pwchange">Passwort ändern</button><button class="btn sm ghost" data-act="logout">Abmelden</button></div></div>'}

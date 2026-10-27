@@ -819,3 +819,32 @@ body.focus .card,body.focus .lec,body.focus .story .sp{backdrop-filter:none;-web
 @media (prefers-reduced-motion:reduce){.tourc,.tour-sq{animation:none}}
 .instc{display:flex;gap:10px;align-items:flex-start}
 .instc .x{flex:0 0 auto}
+
+/* ===== Melden-Knopf (unten rechts, nie über Inhalten: die Seite bekommt unten Platz) ===== */
+.meldenbtn{position:fixed;right:12px;bottom:calc(var(--nav-h) + 12px + env(safe-area-inset-bottom,0px));z-index:30;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 14px;border-radius:99px;border:1.5px solid var(--line);background:var(--surface);color:var(--muted);font:600 .88rem var(--f-body);box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
+.meldenbtn:hover,.meldenbtn:focus-visible{color:var(--ink);border-color:var(--hi,var(--acc))}
+.meldenbtn:disabled{opacity:.6;cursor:progress}
+body.has-melden{padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 72px)}
+body.pg-login .meldenbtn{display:none}
+@media (min-width:900px){.meldenbtn{bottom:16px;right:16px}body.has-melden{padding-bottom:72px}}
+.melden .chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.melden .chipbtn{min-height:40px;padding:6px 14px;border-radius:99px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:600 .92rem var(--f-body);cursor:pointer}
+.melden .chipbtn.on{background:var(--acc,var(--hi));border-color:var(--acc,var(--hi));color:var(--surface)}
+.melden .mfield{display:block;margin:6px 0 10px}.melden .mfield span{display:block;font-weight:600;font-size:.9rem;margin-bottom:4px}
+.melden textarea{width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:10px 12px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);resize:vertical}
+.melden .meldimg{display:block;max-width:100%;max-height:38vh;margin:8px auto 0;border-radius:10px;border:1px solid var(--line);object-fit:contain}
+body:has(.tourc) .meldenbtn{display:none} /* Eichhörnchen-Tour unten: Knopf so lange weg */
+
+/* ===== Formel-Fenster (NACHTRAG 6) ===== */
+.anim-stage:empty{display:none}
+.anim-x{display:flex;justify-content:flex-end;margin-top:6px}
+figure.anim.astext .anim-text{display:block}
+figure.anim.astext .anim-st{visibility:visible;opacity:1;margin:0 0 12px;padding-top:10px;border-top:1px dashed var(--line)}
+figure.anim.astext .anim-ctl,figure.anim.astext .anim-bar{display:none}
+.anim-tx .why,.fsteps .why{display:block;font-style:italic;color:var(--muted);font-size:.93rem;margin-top:4px}
+.bad-x{color:var(--bad,#c0392b);font-weight:700}
+.fsteps{margin:6px 0 0;padding-left:22px}.fsteps li{margin:0 0 10px}.fxs{overflow-x:auto;margin:4px 0}
+.fmist{list-style:none;margin:6px 0 0;padding:0}.fmist li{margin:0 0 8px;padding-left:2px}
+.fxsheet .sh{margin-top:18px}
+.psvg{max-width:280px;margin:6px auto 4px}.psvg svg{width:100%;height:auto;display:block}
+.exbox.vs{margin-top:8px;background:var(--raise,var(--acc-soft))}
