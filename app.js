@@ -154,7 +154,9 @@ function ck(id,label){var on=!!S.done[id];return '<button class="ck'+(on?' on':'
 function wideMath(el){try{(el||document).querySelectorAll('mjx-container:not([display="true"])').forEach(function(m){var p=m.parentElement;if(!p)return;var w=m.getBoundingClientRect().width,c=p.clientWidth-(m.closest('.anim-f')?20:0);if(w<=c+1)return;
   if(m.closest('.anim-f')&&c/w>=.66){m.style.fontSize=(Math.floor(c/w*100)/100)+'em';return} /* Animation: Ergebnis soll ganz sichtbar sein, lieber etwas kleiner */
   m.classList.add('mjwide')})}catch(e){}}
-function ts(el){try{if(window.MathJax&&MathJax.typesetPromise){if(MathJax.typesetClear)MathJax.typesetClear([el]);return MathJax.typesetPromise([el]).then(function(){wideMath(el)}).catch(function(){})}}catch(e){}return Promise.resolve()}
+/* Formel im Quiz/Fenster (.fxbig): zu breit → verkleinern bis 55 %, damit sie ganz sichtbar ist; erst darunter seitlich wischen */
+function fitFx(el){try{(el||document).querySelectorAll('.fxbig').forEach(function(b){var m=b.querySelector('mjx-container');if(!m)return;m.style.fontSize='';var c=b.clientWidth-24,w=m.scrollWidth||m.getBoundingClientRect().width;if(w>c+1)m.style.fontSize=Math.max(.55,Math.floor(c/w*100)/100)+'em'})}catch(e){}}
+function ts(el){try{if(window.MathJax&&MathJax.typesetPromise){if(MathJax.typesetClear)MathJax.typesetClear([el]);return MathJax.typesetPromise([el]).then(function(){wideMath(el);fitFx(el)}).catch(function(){})}}catch(e){}return Promise.resolve()}
 window.__typesetMain=function(){ts(main);if(!layer.hidden)ts(layer)};
 setTimeout(function(){if(!(window.MathJax&&MathJax.typesetPromise)){document.body.classList.add('nomj');toast('Formeln werden gerade nur als Text gezeigt (kein Internet?).')}},7000);
 
@@ -979,15 +981,23 @@ function unitSheet(){
 /* ================= Formel-Quiz (Bausteine: Bedeutung, Symbol, Einheit, Wirkung) ================= */
 function fqPool(m){var fs=m.formulas.filter(function(f){var l=f.lecture&&LECT[f.lecture];return !l||!l.date||lecHeld(l)||pd(l.date)<=addDays(TODAY,7)});return fs.length?fs:m.formulas}
 function formulaItems(m,n,only){var fs=only&&only.length?only:fqPool(m),parts=[];fs.forEach(function(f){(f.parts||[]).forEach(function(p){parts.push({f:f,p:p})})});
-  var gr=parts.filter(function(x){return x.p.kind?x.p.kind==='größe':!x.p.ref||['frac','sum','sqrt','eq','cdot'].indexOf(x.p.ref)<0});
+  var OPS=['frac','sum','sqrt','eq','cdot','le','ge','lt','gt','neq','implies','iff','and','or','neg','forall','exists','in','subset','cup','setminus','pm','interval','integral','log','nroot','cos','sin','tan','exp','arcsin','approx','to'];
+  function isGr(x){return x.p.kind?x.p.kind==='größe':!x.p.ref||OPS.indexOf(x.p.ref)<0}
+  var gr=parts.filter(isGr),grAll=[];m.formulas.forEach(function(f){(f.parts||[]).forEach(function(p){var y={f:f,p:p};if(isGr(y))grAll.push(y)})});
   function pickDistinct(arr,val,keyf,k){var seen={},out=[];seen[keyf(val)]=1;shuffle(arr).forEach(function(x){var kk=keyf(x);if(out.length<k&&kk&&!seen[kk]){seen[kk]=1;out.push(x)}});return out}
   function mcItem(id,q,right,wrongs,render,sol){var opts=shuffle([right].concat(wrongs));return {id:id,mod:m.id,type:'mc',q:q,options:opts.map(render),correct:opts.indexOf(right),a:sol}}
+  /* Falsche Antworten nur aus derselben Formel, dann demselben Thema, dann derselben Vorlesung – nie fachfremd. Zu wenige → Frage entfällt. */
+  function near(x,keyf){var same=grAll.filter(function(y){return y.f===x.f}),top=grAll.filter(function(y){return y.f!==x.f&&y.f.topic&&y.f.topic===x.f.topic}),lec=grAll.filter(function(y){return y.f!==x.f&&y.f.topic!==x.f.topic&&y.f.lecture&&y.f.lecture===x.f.lecture});
+    var nm=function(t){return String(t||'').toLowerCase().replace(/[^a-zäöüß]/g,'')},xs=String(x.p.sym).replace(/\s/g,''),xn=nm(x.p.name).slice(0,6);
+    function ok(y){if(y.p.ref&&OPS.indexOf(y.p.ref)>=0)return false;if(/^(echt |nicht )?(größer|kleiner|gleich|ungleich)|daraus folgt|genau dann|für alle|es gibt|^und$|^oder$|^nicht$/i.test(y.p.name||''))return false; /* Zeichen, keine Größe */if(String(y.p.sym).replace(/\s/g,'')===xs)return false; /* gleiches Zeichen, anderer Name = meist Synonym */
+      return nm(y.p.name).slice(0,6)!==xn} /* „Definitionsbereich“ vs. „Definitionsmenge“ */
+    var out=[],seen={};seen[keyf(x)]=1;[same,top,lec].forEach(function(arr){shuffle(arr.filter(ok)).forEach(function(y){var k=keyf(y);if(out.length<3&&k&&!seen[k]){seen[k]=1;out.push(y)}})});return out.length<3?null:out}
   function fx(f){return '<div class="fxbig" style="margin-top:8px">\\['+texSafe(f.tex)+'\\]</div>'}
   function solOf(x){var p=x.p;return '<b>'+mx(p.sym)+' = '+esc(p.name)+'</b>'+(p.unit&&p.unit!==''?' · Einheit: <b>'+esc(p.unit)+'</b>':'')+'<br>'+(p.d||'')+(p.effect?'<br><span class="muted">Wirkung: '+esc(p.effect)+'</span>':'')+'<div class="small muted" style="margin-top:6px">Formel: '+esc(x.f.name)+'</div>'}
   var items=[],gens=[
-   function(x){var w=pickDistinct(x.f.parts.map(function(p){return {p:p,f:x.f}}).concat(gr),x,function(y){return y.p.name},3);if(w.length<3)return null;
-     return mcItem('fq:n:'+x.f.id+x.p.sym,'Was bedeutet '+mx(x.p.sym)+' in dieser Formel?'+fx(x.f),x,w,function(y){return esc(y.p.name)},solOf(x))},
-   function(x){var w=pickDistinct(x.f.parts.map(function(p){return {p:p,f:x.f}}).concat(gr),x,function(y){return y.p.sym},3);if(w.length<3)return null;
+   function(x){var w=near(x,function(y){return y.p.name});if(!w)return null;
+     return mcItem('fq:n:'+x.f.id+x.p.sym,'In der Formel <b>'+esc(x.f.name)+'</b>: Wofür steht '+mx(x.p.sym)+'?'+fx(x.f),x,w,function(y){return esc(y.p.name)},solOf(x))},
+   function(x){var w=near(x,function(y){return y.p.sym});if(!w)return null;
      return mcItem('fq:s:'+x.f.id+x.p.sym,'Formel <b>'+esc(x.f.name)+'</b>: Welches Symbol steht für <b>'+esc(x.p.name)+'</b>?',x,w,function(y){return mx(y.p.sym)},solOf(x))},
    function(x){if(!x.p.unit||x.p.unit==='–'||/^\\text\{/.test(x.p.sym))return null;var w=pickDistinct(gr.filter(function(y){return y.p.unit&&y.p.unit!=='–'}).concat(UNITFAM[0].u.concat(UNITFAM[1].u,UNITFAM[2].u,UNITFAM[6].u.slice(0,1),[['mm³'],['kNm'],['–']]).map(function(u){return {p:{unit:u[0]},f:x.f}})),x,function(y){return y.p.unit},3);if(w.length<3)return null;
      return mcItem('fq:u:'+x.f.id+x.p.sym,'Welche Einheit hat '+mx(x.p.sym)+' ('+esc(x.p.name)+')?'+fx(x.f),x,w,function(y){return esc(y.p.unit)},solOf(x))},
@@ -1415,5 +1425,5 @@ function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;D.mods.forEa
 document.addEventListener('keyup',function(e){var c=document.getElementById('lcaps');if(c&&e.getModifierState&&document.activeElement&&document.activeElement.id==='lpw')c.classList.toggle('on',e.getModifierState('CapsLock'))});
 setTimeout(function(){syncNow(true)},1500);setInterval(function(){if(!document.hidden)syncNow(true)},120000);
 document.addEventListener('visibilitychange',function(){syncNow(true)});window.addEventListener('online',function(){syncNow(true)});
-window.__dbg={S:function(){return S},dynItems:dynItems,dynEval:dynEval,symGaps:symGaps,symKeys:symKeys,D:D,weeklyOn:weeklyOn,pd:pd};
+window.__dbg={S:function(){return S},MOD:MOD,formulaItems:formulaItems,runItems:runItems,dynItems:dynItems,dynEval:dynEval,symGaps:symGaps,symKeys:symKeys,D:D,weeklyOn:weeklyOn,pd:pd};
 })();
