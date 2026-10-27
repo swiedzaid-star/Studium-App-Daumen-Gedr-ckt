@@ -54,8 +54,10 @@
     if(spec&&spec.min!=null)return range(spec.min,spec.max,spec.step||1,spec.not||[]);
     return spec}
   function range(a,b,st,not){for(var k=0;k<50;k++){var n=Math.floor((b-a)/st+1e-9)+1,v=a+st*Math.floor(Math.random()*n);v=Math.round(v*1e9)/1e9;if(not.indexOf(v)<0)return v}return a}
-  function fill(str,sc){if(str==null)return str;return String(str).replace(/\{\{([\s\S]+?)\}\}/g,function(_,inner){var m=inner.match(/^([\s\S]*?)(?::(\d+)(t?))?$/),expr=m[1],dec=m[2]!=null?+m[2]:null,isTex=!!m[3];
-      var v=ev(expr,sc);if(typeof v==='number'&&!isFinite(v))throw new Error('nicht endlich: '+expr);if(v===undefined)throw new Error('undefiniert: '+expr);return fmt(v,dec,isTex)})}
+  function fill(str,sc){if(str==null)return str;return String(str).replace(/\{\{([\s\S]+?)\}\}/g,function(_,inner,pos,whole){var m=inner.match(/^([\s\S]*?)(?::(\d+)(t?))?$/),expr=m[1],dec=m[2]!=null?+m[2]:null,isTex=!!m[3];
+      var v=ev(expr,sc);if(typeof v==='number'&&!isFinite(v))throw new Error('nicht endlich: '+expr);if(v===undefined)throw new Error('undefiniert: '+expr);var out=fmt(v,dec,isTex);
+      /* Steht direkt davor ein TeX-Befehl (\pm, \cdot …) und der Wert beginnt mit einem Buchstaben, braucht es ein Leerzeichen: \pm + i → \pm i, sonst liest TeX „\pmi“ */
+      if(/\\[A-Za-z]+$/.test(whole.slice(0,pos))&&/^[A-Za-z]/.test(out))out=' '+out;return out})}
   function instance(t,tries){var g=t.gen;if(!g)return null;tries=tries||60;var last;
     for(var k=0;k<tries;k++){try{var sc={};Object.keys(g.vars||{}).forEach(function(n){sc[n]=pickVar(g.vars[n])});
       Object.keys(g.let||{}).forEach(function(n){sc[n]=ev(g.let[n],sc)});

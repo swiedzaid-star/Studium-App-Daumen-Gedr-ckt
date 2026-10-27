@@ -821,10 +821,11 @@ body.focus .card,body.focus .lec,body.focus .story .sp{backdrop-filter:none;-web
 .instc .x{flex:0 0 auto}
 
 /* ===== Melden-Knopf (unten rechts, nie über Inhalten: die Seite bekommt unten Platz) ===== */
-.meldenbtn{position:fixed;right:12px;bottom:calc(var(--nav-h) + 12px + env(safe-area-inset-bottom,0px));z-index:30;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 14px;border-radius:99px;border:1.5px solid var(--line);background:var(--surface);color:var(--muted);font:600 .88rem var(--f-body);box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
+.meldenbtn{position:fixed;right:12px;bottom:calc(var(--nav-h) + 12px + env(safe-area-inset-bottom,0px));z-index:45;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 14px;border-radius:99px;border:1.5px solid var(--line);background:var(--surface);color:var(--muted);font:600 .88rem var(--f-body);box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
 .meldenbtn:hover,.meldenbtn:focus-visible{color:var(--ink);border-color:var(--hi,var(--acc))}
 .meldenbtn:disabled{opacity:.6;cursor:progress}
 body.has-melden{padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 72px)}
+body.has-melden .layer{padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))} /* über dem Fenster (z-index 40) sichtbar, unten Platz */
 body.pg-login .meldenbtn{display:none}
 @media (min-width:900px){.meldenbtn{bottom:16px;right:16px}body.has-melden{padding-bottom:72px}}
 .melden .chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
@@ -833,7 +834,7 @@ body.pg-login .meldenbtn{display:none}
 .melden .mfield{display:block;margin:6px 0 10px}.melden .mfield span{display:block;font-weight:600;font-size:.9rem;margin-bottom:4px}
 .melden textarea{width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:10px 12px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);resize:vertical}
 .melden .meldimg{display:block;max-width:100%;max-height:38vh;margin:8px auto 0;border-radius:10px;border:1px solid var(--line);object-fit:contain}
-body:has(.tourc) .meldenbtn{display:none} /* Eichhörnchen-Tour unten: Knopf so lange weg */
+body:has(.tourc) .meldenbtn,body:has(.layer:not([hidden]) .melden) .meldenbtn{display:none} /* Eichhörnchen-Tour unten: Knopf so lange weg */
 
 /* ===== Formel-Fenster (NACHTRAG 6) ===== */
 .anim-stage:empty{display:none}

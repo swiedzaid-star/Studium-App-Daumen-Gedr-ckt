@@ -682,10 +682,16 @@ function termQuestions(terms,pool){
     var kind=typeIdx[idx]?'type':kinds[Math.floor(Math.random()*kinds.length)];
     if(kind==='type')return {id:'q:'+t.key,mod:t.mod,type:'typed',q:'Wie heißt der Fachbegriff?<div class="qdef">'+maskTerm(t.d,t)+'</div>'+(t.ex?'<div class="small muted" style="margin-top:6px">Beispiel: '+maskTerm(t.ex,t)+'</div>':''),termObj:t,a:sol,term:t.key};
     var others=similarTerms(t,pool,4),opts=shuffle([t].concat(others)),q,ops;
+    var head='<b>'+t.t+'</b>'+(t.sym?' '+mx(t.sym):''),exb=t.ex?'<div class="exbox"><b>Beispiel:</b> '+t.ex+'</div>':'',vsb=t.vs?'<div class="exbox vs"><b>Nicht verwechseln:</b> '+t.vs+'</div>':'';
+    /* Die Lösung wiederholt nicht die Frage: Bei „Welcher Begriff passt?“ steht die Definition schon oben, also kommen Beispiel/Abgrenzung; bei „Was bedeutet …?“ kommt die Definition. Falsch gewählt → der gewählte Begriff wird erklärt. */
+    function solFor(chosen){var o=chosen&&chosen!==t?chosen:null,vgl=o?'<div class="exbox vs"><b>Du hast '+o.t+'</b>'+(o.sym?' '+mx(o.sym):'')+' <b>gewählt.</b> Das ist: '+o.d+'</div>':'';
+      if(kind==='term')return head+': '+t.d+exb+vsb+vgl;
+      if(kind==='ex')return head+': '+t.d+vsb+vgl;
+      return head+(exb||vsb?exb+vsb:'<br><span class="muted">'+t.d+'</span>')+vgl}
     if(kind==='term'){q='Was bedeutet <b>'+t.t+'</b>'+(t.sym?' '+mx(t.sym):'')+'?';ops=opts.map(function(o){return maskTerm(o.d,o)})}
     else if(kind==='ex'){q='Zu welchem Begriff gehört dieses Beispiel?<div class="qdef">'+maskTerm(t.ex,t)+'</div>';ops=opts.map(function(o){return o.t})}
     else{q='Welcher Begriff passt?<div class="qdef">'+maskTerm(t.d,t)+'</div>';ops=opts.map(function(o){return o.t})}
-    return {id:'q:'+t.key,mod:t.mod,type:'mc',q:q,options:ops,correct:opts.indexOf(t),a:sol,term:t.key}});
+    return {id:'q:'+t.key,mod:t.mod,type:'mc',q:q,options:ops,correct:opts.indexOf(t),a:solFor(null),solFor:function(k){return solFor(opts[k])},term:t.key}});
 }
 function termGroups(l){var by={},order=[];(l.terms||[]).forEach(function(t){var k=t.topic||'x';if(!by[k]){by[k]=[];order.push(k)}by[k].push(t)});var groups=[];
   order.forEach(function(k){var arr=by[k],name=TOPIC[k]?TOPIC[k].name:l.title;for(var i=0;i<arr.length;i+=10){var part=arr.slice(i,i+10);if(part.length<4&&groups.length){groups[groups.length-1].terms=groups[groups.length-1].terms.concat(part)}else groups.push({name:name+(arr.length>10?' '+(Math.floor(i/10)+1):''),terms:part})}});
@@ -733,7 +739,7 @@ function runItems(items,o){
     sheet(header()+body,{title:o.title,replace:true});
     if(t.type==='mc')$$('.opt',layer).forEach(function(b){b.onclick=function(){if(answered)return;answered=true;var k=+b.getAttribute('data-k'),ok=k===t.correct;
       $$('.opt',layer).forEach(function(x){x.disabled=true;if(+x.getAttribute('data-k')===t.correct)x.classList.add('right')});if(!ok)b.classList.add('wrong');
-      record(ok?1:0);showAfter(ok?'<div class="fb ok">Richtig! +10 XP</div>':'<div class="fb bad">Nicht ganz.</div>',true)}});
+      if(t.solFor)cur.a=t.solFor(k);record(ok?1:0);showAfter(ok?'<div class="fb ok">Richtig! +10 XP</div>':'<div class="fb bad">Nicht ganz.</div>',true)}});
     else if(t.type==='typed'){var inp=$('#tyi');setTimeout(function(){try{inp.focus()}catch(e){}},50);
       $('#tyf').onsubmit=function(e){e.preventDefault();if(answered)return;if(!inp.value.trim()){inp.focus();return}answered=true;var ok=t.check?t.check(inp.value):typedOk(inp.value,t.termObj);inp.disabled=true;inp.classList.add(ok?'right':'wrong');$('#tyf button').remove();var sk=$('#skip');if(sk)sk.parentNode.remove();
         record(ok?1:0);showAfter(ok?'<div class="fb ok">Richtig! +10 XP</div>':((t.hint&&t.hint(inp.value))||'')+'<div class="fb bad">Nicht ganz. Gesucht war: <b>'+(t.expect||t.termObj.t)+'</b></div>',true)};
@@ -1209,13 +1215,13 @@ function meldenBtn(){var b=document.getElementById('meldenbtn'),show=loggedIn()&
 function loadScript(src){return new Promise(function(ok,bad){if(document.querySelector('script[data-src="'+src+'"]')&&window.htmlToImage)return ok();var sc=document.createElement('script');sc.src=src;sc.setAttribute('data-src',src);sc.onload=function(){ok()};sc.onerror=function(){bad(new Error('Laden fehlgeschlagen'))};document.head.appendChild(sc)})}
 function snapBg(){var c=[document.body,document.documentElement].map(function(e){return getComputedStyle(e).backgroundColor}).filter(function(x){return x&&!/rgba\(0, 0, 0, 0\)|transparent/.test(x)})[0];
   return c||getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()||'#ffffff'}
-function snapshot(){var w=innerWidth,h=innerHeight,x=scrollX,y=scrollY;
+function snapshot(){var w=innerWidth,h=innerHeight,x=scrollX,y=scrollY,inLayer=!layer.hidden,root=inLayer?layer:document.body;if(inLayer){x=0;y=layer.scrollTop} /* offenes Fenster (Quiz, Vorlesung …): das Fenster selbst abbilden, nicht die Seite dahinter */
   return loadScript('vendor/html-to-image/html-to-image.js').then(function(){
     var opt=function(pr){return {width:w,height:h,pixelRatio:pr,cacheBust:false,skipAutoScale:true,includeStyleProperties:SNAPSTYLE,backgroundColor:snapBg(),
       style:{transform:'translate('+(-x)+'px,'+(-y)+'px)',transformOrigin:'0 0'},
-      filter:function(n){if(!n||!n.tagName)return true;if(n.id==='meldenbtn'||n.id==='layer'||n.tagName==='MJX-ASSISTIVE-MML'||(n.classList&&(n.classList.contains('toast')||n.classList.contains('nav'))))return false; /* feste Leiste verrutscht beim Verschieben → weglassen */ /* Vorlese-Zwilling der Formeln nicht mitzeichnen */return !(n.tagName==='INPUT'&&/password/i.test(n.type))}}};
+      filter:function(n){if(!n||!n.tagName)return true;if(n.id==='meldenbtn'||(n.id==='layer'&&!inLayer)||n.tagName==='MJX-ASSISTIVE-MML'||(n.classList&&(n.classList.contains('toast')||n.classList.contains('nav'))))return false; /* feste Leiste verrutscht beim Verschieben → weglassen */ /* Vorlese-Zwilling der Formeln nicht mitzeichnen */return !(n.tagName==='INPUT'&&/password/i.test(n.type))}}};
     var pr=Math.min(window.devicePixelRatio||1,2);
-    return htmlToImage.toPng(document.body,opt(pr)).then(function(png){return png.length*.75>1.9e6?htmlToImage.toPng(document.body,opt(1)):png})})}
+    return htmlToImage.toPng(root,opt(pr)).then(function(png){return png.length*.75>1.9e6?htmlToImage.toPng(root,opt(1)):png})})}
 function meldenSheet(){$$('.toast').forEach(function(t){t.remove()});var arts=[['fehler','Fehler'],['idee','Idee'],['gefaellt-nicht','Gefällt mir nicht']];
   sheet('<div class="story melden"><h2>Melden</h2><p class="small muted">Was ist passiert, was fehlt dir, was gefällt dir nicht? Geht direkt an den Entwickler der App.</p>'+
    '<div class="chips" role="radiogroup" aria-label="Art">'+arts.map(function(a){return '<button class="chipbtn'+(MELD.art===a[0]?' on':'')+'" role="radio" aria-checked="'+(MELD.art===a[0])+'" data-act="meldart" data-a="'+a[0]+'">'+a[1]+'</button>'}).join('')+'</div>'+
@@ -1425,5 +1431,5 @@ function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;D.mods.forEa
 document.addEventListener('keyup',function(e){var c=document.getElementById('lcaps');if(c&&e.getModifierState&&document.activeElement&&document.activeElement.id==='lpw')c.classList.toggle('on',e.getModifierState('CapsLock'))});
 setTimeout(function(){syncNow(true)},1500);setInterval(function(){if(!document.hidden)syncNow(true)},120000);
 document.addEventListener('visibilitychange',function(){syncNow(true)});window.addEventListener('online',function(){syncNow(true)});
-window.__dbg={S:function(){return S},MOD:MOD,formulaItems:formulaItems,runItems:runItems,dynItems:dynItems,dynEval:dynEval,symGaps:symGaps,symKeys:symKeys,D:D,weeklyOn:weeklyOn,pd:pd};
+window.__dbg={S:function(){return S},termQuestions:termQuestions,TERM:function(){return TERM},MOD:MOD,formulaItems:formulaItems,runItems:runItems,dynItems:dynItems,dynEval:dynEval,symGaps:symGaps,symKeys:symKeys,D:D,weeklyOn:weeklyOn,pd:pd};
 })();
