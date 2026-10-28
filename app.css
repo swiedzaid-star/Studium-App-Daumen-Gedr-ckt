@@ -849,3 +849,10 @@ figure.anim.astext .anim-ctl,figure.anim.astext .anim-bar{display:none}
 .fxsheet .sh{margin-top:18px}
 .psvg{max-width:280px;margin:6px auto 4px}.psvg svg{width:100%;height:auto;display:block}
 .exbox.vs{margin-top:8px;background:var(--raise,var(--acc-soft))}
+
+/* ===== Eigene Frist ===== */
+.eigf .mfield{display:block;margin:6px 0 10px}.eigf .mfield span{display:block;font-weight:600;font-size:.9rem;margin-bottom:4px}
+.eigf .tyi{width:100%;box-sizing:border-box;font-size:16px}
+.eigf .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.item .x.sm{flex:0 0 auto;width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:1.1rem;cursor:pointer;margin-left:6px}
+.item .x.sm:hover{color:var(--ink)}
