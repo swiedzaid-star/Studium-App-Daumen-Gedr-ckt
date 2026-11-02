@@ -825,6 +825,7 @@ body.focus .card,body.focus .lec,body.focus .story .sp{backdrop-filter:none;-web
 .meldenbtn:hover,.meldenbtn:focus-visible{color:var(--ink);border-color:var(--hi,var(--acc))}
 .meldenbtn:disabled{opacity:.6;cursor:progress}
 body.has-melden{padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 72px)}
+body.has-melden .lbody{padding-bottom:72px} /* auch in Fenstern: unterste Antwort nie unter dem Knopf */
 body.has-melden .layer{padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))} /* über dem Fenster (z-index 40) sichtbar, unten Platz */
 body.pg-login .meldenbtn{display:none}
 @media (min-width:900px){.meldenbtn{bottom:16px;right:16px}body.has-melden{padding-bottom:72px}}

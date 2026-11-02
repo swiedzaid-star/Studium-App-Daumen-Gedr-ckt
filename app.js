@@ -264,8 +264,8 @@ function haeppchen(){
   // 1. Lernplan-Einheit von heute (oder verpasste)
   MODS.forEach(function(m){m.exams.forEach(function(x){var p=S.plans[x.id];if(!p)return;if(x.date&&pd(x.date)<TODAY)return; /* Prüfung vorbei: alte Plan-Einheiten nicht mehr nachholen */p.sessions.forEach(function(s){if(!p.done[s.id]&&pd(s.date)<=TODAY&&out.length<1){out.push({key:'plan:'+x.id+':'+s.id,mod:m.id,title:s.title?x.name+': '+s.title:s.final?'Abschlusstest '+x.name:(function(){var tn=s.topics.map(function(t){return TOPIC[t]?TOPIC[t].name:t}).join(' + ');return x.name.indexOf(tn)>=0?'Lernplan '+x.name:'Lernplan '+x.name+': '+tn})(),min:s.min||(s.final?20:12),act:'session',exam:x.id,sid:s.id})}})})});
   // 2. Einstufungstest der nächsten Prüfung ohne Test
-  if(out.length<1){var best=null;MODS.forEach(function(m){m.exams.forEach(function(x){if(x.date&&pd(x.date)>=TODAY&&dd(TODAY,pd(x.date))<=21&&!S.diag[x.id]&&diagItems(m,x).length&&(!best||pd(x.date)<pd(best.x.date)))best={m:m,x:x}})});
-    if(best)out.push({key:'diag:'+best.x.id,mod:best.m.id,title:'Einstufungstest '+best.x.name+' ('+SHORT[best.m.id]+')',min:Math.max(5,Math.round(diagItems(best.m,best.x).length*2)),act:'diag',exam:best.x.id})}
+  if(out.length<1){var best=null;MODS.forEach(function(m){m.exams.forEach(function(x){if(x.date&&pd(x.date)>=TODAY&&dd(TODAY,pd(x.date))<=21&&!S.diag[x.id]&&diagCount(m,x)&&(!best||pd(x.date)<pd(best.x.date)))best={m:m,x:x}})});
+    if(best)out.push({key:'diag:'+best.x.id,mod:best.m.id,title:'Einstufungstest '+best.x.name+' ('+SHORT[best.m.id]+')',min:Math.max(5,Math.round(diagCount(best.m,best.x)*1.3)),act:'diag',exam:best.x.id})}
   // 3. Wiederholung im Fach mit der jüngsten Vorlesung
   var recent=null;MODS.forEach(function(m){m.lectures.forEach(function(l){var d=pd(l.date);if(d&&lecHeld(l)&&reviewItems(m).length&&(!recent||d>recent.d))recent={m:m,d:d}})});
   if(recent)out.push({key:'rev:'+recent.m.id,mod:recent.m.id,title:'Wiederholung '+SHORT[recent.m.id],min:12,act:'review'});
@@ -782,14 +782,31 @@ function reviewItems(m){
   return shuffle(a.concat(b));
 }
 
-/* ---------- Prüfungen, Einstufung, Lernplan ---------- */
-function diagItems(m,x){var out=[];(x.topics||[]).forEach(function(tid){var d=tasksOfTopic(tid).filter(function(t){return t.diag});d.sort(function(a,b){return a.level-b.level});
-  if(d.length>2)d=[d[0],d[d.length-1]];out=out.concat(d)});
-  if(out.length>24){var one={};out=out.filter(function(t){if(one[t.topic])return false;one[t.topic]=1;return true})}
-  return out}
+/* ---------- Prüfungen, Einstufung, Lernplan (docs/EINSTUFUNG-STANDARD.md) ----------
+   Test: genau 10 Aufgaben (3 leicht → 4 mittel → 3 prüfungsschwer), nur diag:true. ≤ 10 Themen: jedes Thema einmal, Rest nach Schwäche;
+   > 10 Themen: Stichprobe, Vorrang für nie geprüfte und wackelige Themen, sonst das am längsten nicht geprüfte (Rotation über S.diag[x].seen).
+   Fehlt eine Stufe im Bestand, nimmt der Test die nächstbeste Stufe. Weniger als 10 Diagnose-Aufgaben insgesamt → alle. */
+var DIAG_STUFEN=[1,1,1,2,2,2,2,3,3,3];
+function diagLast(xid){var d=S.diag[xid]||{},o={};[d.scores,d.after&&d.after.scores].forEach(function(sc){if(sc)Object.keys(sc).forEach(function(t){o[t]=sc[t]})});return o}
+function diagPool(x){var pool={};(x.topics||[]).forEach(function(tid){var d=tasksOfTopic(tid).filter(function(t){return t.diag});if(d.length)pool[tid]=d});return pool}
+function diagCount(m,x){var n=0,pool=diagPool(x);Object.keys(pool).forEach(function(t){n+=pool[t].length});return Math.min(10,n)}
+function diagItems(m,x){var pool=diagPool(x),tids=Object.keys(pool);if(!tids.length)return [];
+  var seen=(S.diag[x.id]&&S.diag[x.id].seen)||{},last=diagLast(x.id);
+  /* Rangfolge der Themen: nie geprüft → wackelig/fehlt (schwächste zuerst) → am längsten nicht geprüft; Zufall bei Gleichstand */
+  var rank=function(t){var s=last[t];return [seen[t]?1:0,s==null?0:s<.8?s:1+(seen[t]||0)/1e13]};
+  var order=shuffle(tids).sort(function(a,b){var A=rank(a),B=rank(b);return A[0]-B[0]||A[1]-B[1]});
+  var picks=order.slice(0,10);
+  /* ≤ 10 Themen: Rest der 10 Plätze nach Schwäche wieder von vorn (jedes Thema höchstens so oft, wie es Aufgaben hat) */
+  for(var r=0;picks.length<10&&r<10;r++)order.forEach(function(t){if(picks.length<10&&picks.filter(function(p){return p===t}).length<pool[t].length)picks.push(t)});
+  var used={},out=[],left=picks.slice();
+  DIAG_STUFEN.slice(0,picks.length).forEach(function(L){var best=null;
+    left.forEach(function(t,i){pool[t].forEach(function(task){if(used[task.id])return;var dist=Math.abs((task.level||1)-L)*2+((task.level||1)<L?1:0); /* bei Gleichstand lieber etwas schwerer als leichter */
+      if(!best||dist<best.dist)best={dist:dist,task:task,i:i}})});
+    if(best){used[best.task.id]=1;out.push(best.task);left.splice(best.i,1)}});
+  return out.sort(function(a,b){return (a.level||1)-(b.level||1)})}
 function examRow(m,x){var p=S.plans[x.id],dg=S.diag[x.id],st;
   if(p){var tot=p.sessions.length,dn=p.sessions.filter(function(s){return p.done[s.id]}).length;st='<span class="chip acc">Plan '+dn+'/'+tot+'</span>'}
-  else if(diagItems(m,x).length)st='<span class="chip warn">Test offen</span>';else st='<span class="chip">noch kein Stoff</span>';
+  else if(diagCount(m,x))st='<span class="chip warn">Test offen</span>';else st='<span class="chip">noch kein Stoff</span>';
   var er=examReady(x);
   return '<a class="item" href="#/fach/'+m.id+'/pruefungen/'+x.id+'"><span class="grow"><span class="kind">'+esc(KIND[x.kind]||x.kind)+'</span><div class="t">'+esc(x.name)+'</div><div class="s">'+(x.date?fmtDY(pd(x.date))+' · '+rel(pd(x.date)):'Termin offen')+'</div>'+(er!=null?rbar(er):'<div style="margin-top:4px">'+st+'</div>')+'</span><span class="chev">'+IC.chev+'</span></a>'}
 function vRadar(m){var r=m.radar;if(!r)return '';
@@ -815,22 +832,22 @@ function vExams(m){
 }
 function vExam(m,x){
   if(!x)return '<div class="card empty">Nicht gefunden.</div>';
-  var di=diagItems(m,x),dg=S.diag[x.id],p=S.plans[x.id];
+  var di={length:diagCount(m,x)},dg=S.diag[x.id],p=S.plans[x.id];
   var h='<section class="sec"><a class="back2" href="#/fach/'+m.id+'/pruefungen">'+IC.back+' Alle Prüfungen</a><h2 style="font-size:1.5rem;margin-top:8px">'+esc(x.name)+'</h2><p class="muted">'+(x.date?WDL[pd(x.date).getDay()]+', '+pd(x.date).getDate()+'. '+MON[pd(x.date).getMonth()]+(x.time?' · '+esc(x.time):'')+' · <b>'+rel(pd(x.date))+'</b>':'Termin offen')+(x.place?' · '+esc(x.place):'')+'</p>'+(x.note?'<div class="card small">'+noteHtml(x.note)+'</div>':'')+'</section>';
   var er=examReady(x),topicsHtml='';
   if(er!=null){h+='<section class="sec"><div class="card">'+rbar(er,'Bereit für '+esc(x.name))+'<p class="small muted" style="margin:8px 0 0">Rechnet sich aus deinen Übungen (70 %) und gekonnten Begriffen (30 %) je Thema.</p></div></section>';
     topicsHtml='<section class="sec"><details class="more list"><summary>Alle Themen einzeln lernen und üben</summary>'+(x.topics||[]).map(function(tid){var tp=TOPIC[tid],r=topicReady(tid),l=tp&&LECT[tp.lecture];
       return '<div class="item"><span class="grow"><span class="t">'+esc(tp?tp.name:tid)+'</span>'+(r!=null?rbar(r):'<div class="s">noch kein Stoff</div>')+'</span>'+(hasLearn(tid)?'<button class="btn sm ghost" data-act="learn" data-t="'+tid+'">Lesen</button>':l?'<a class="btn sm ghost" href="#/fach/'+m.id+'/vorlesungen/'+l.id+'">Lesen</a>':'')+(tasksOfTopic(tid).length?'<button class="btn sm soft" data-act="ptopic" data-t="'+tid+'">Üben</button>':'')+'</div>'}).join('')+'</details></section>'}
   if(!di.length&&!p){h+='<div class="card empty">Für diese Prüfung gibt es noch keinen Stoff. Sobald die Vorlesungen dazu waren, kommt hier der Einstufungstest.</div>';return h}
-  var steps='<div class="steps3"><div class="st'+(dg?' ok':'')+'"><span class="no">'+(dg?IC.check:'1')+'</span><div class="grow"><b>Einstufungstest</b><div class="s muted">'+di.length+' Aufgaben · ca. '+Math.max(5,di.length*2)+' min · ehrlich bewerten</div>'+
+  var steps='<div class="steps3"><div class="st'+(dg?' ok':'')+'"><span class="no">'+(dg?IC.check:'1')+'</span><div class="grow"><b>Einstufungstest</b><div class="s muted">'+di.length+' Aufgaben · leicht → prüfungsschwer · ca. '+Math.max(5,Math.round(di.length*1.3))+' min · ehrlich bewerten</div>'+
      '<div class="btns"><button class="btn sm'+(dg?' ghost':'')+'" data-act="diag" data-x="'+x.id+'">'+(dg?'Nochmal testen':'Test starten')+'</button></div></div></div>'+
    '<div class="st'+(dg?' ok':' dim')+'"><span class="no">'+(dg?IC.check:'2')+'</span><div class="grow"><b>Deine Schwächen</b><div class="s muted">'+(dg?'Stand vom '+fmtD(new Date(dg.t)):'nach dem Test')+'</div></div></div>'+
    '<div class="st'+(p?'':' dim')+'"><span class="no">3</span><div class="grow"><b>Dein Lernplan</b><div class="s muted">'+(p?'läuft':'entsteht automatisch')+'</div></div></div></div>';
   h+='<section class="sec">'+steps+'</section>';
   if(dg){var tps=Object.keys(dg.scores).sort(function(a,b){return dg.scores[a]-dg.scores[b]});
-    h+='<section class="sec"><h2>Schwächen und Stärken</h2><div class="card">'+tps.map(function(t){var s=Math.round(dg.scores[t]*100),c=s<50?'bad':s<80?'warn':'ok';return '<div class="topicbar"><span>'+esc(TOPIC[t]?TOPIC[t].name:t)+'</span><span class="bar '+c+'"><span style="width:'+Math.max(4,s)+'%"></span></span><span class="pc">'+s+' %</span></div>'}).join('')+'</div></section>'}
+    h+='<section class="sec"><h2>Schwächen und Stärken</h2><div class="card">'+tps.map(function(t){var s=Math.round(dg.scores[t]*100),c=s<40?'bad':s<80?'warn':'ok';return '<div class="topicbar"><span>'+esc(TOPIC[t]?TOPIC[t].name:t)+' <span class="muted small">· '+(s<40?'fehlt':s<80?'wackelt':'sitzt')+'</span></span><span class="bar '+c+'"><span style="width:'+Math.max(4,s)+'%"></span></span><span class="pc">'+s+' %</span></div>'}).join('')+'</div></section>'}
   if(p){var wkEnd=addDays(thisMon,7),now=p.sessions.filter(function(s){return pd(s.date)<wkEnd||!p.done[s.id]&&pd(s.date)<TODAY});if(p.fixed&&now.length<3)now=p.sessions.filter(function(s){return !p.done[s.id]}).slice(0,Math.max(3,now.length));var later=p.sessions.filter(function(s){return now.indexOf(s)<0});
-    h+='<section class="sec plan"><h2>Lernplan <span class="chip acc">'+p.sessions.filter(function(s){return p.done[s.id]}).length+'/'+p.sessions.length+'</span></h2><p class="muted small">'+(p.fixed?(x.plannote||'Fester Plan bis zum Termin. Tippe auf ▶ für Lesen + Üben, abhaken wenn fertig.'):'Pro Tag ein Häppchen. Zuerst die schwächsten Themen, gemischt mit Wiederholung.')+'</p>'+
+    h+='<section class="sec plan"><h2>Lernplan <span class="chip acc">'+p.sessions.filter(function(s){return p.done[s.id]}).length+'/'+p.sessions.length+'</span></h2><p class="muted small">'+(p.fixed?(x.plannote||'Fester Plan bis zum Termin. Tippe auf ▶ für Lesen + Üben, abhaken wenn fertig.'):p.nogaps?'Alles sitzt – der Plan hält es nur frisch, bis zum Abschlusstest.':'Zuerst was fehlt, dann was wackelt. Was schon sitzt, kommt nicht in den Plan. In jeder Einheit beginnen die Aufgaben leicht und werden prüfungsschwer.')+'</p>'+
      '<div class="list">'+now.map(function(s){return sessRow(m,x,p,s)}).join('')+'</div>'+(later.length?'<details class="more list" style="margin-top:10px"><summary>Später ('+later.length+')</summary>'+later.map(function(s){return sessRow(m,x,p,s)}).join('')+'</details>':'')+'</section>';}
   return h+topicsHtml;
 }
@@ -840,35 +857,36 @@ function sessRow(m,x,p,s){var d=pd(s.date),on=!!p.done[s.id],today=+d===+TODAY,o
   return '<div class="item'+(on?' done':'')+(today?' today':'')+'"><button class="ck'+(on?' on':'')+'" data-act="sess" data-x="'+x.id+'" data-s="'+s.id+'" aria-pressed="'+on+'">'+IC.check+'</button><span class="when">'+(today?'Heute':fmtD(d))+'</span><span class="grow"><span class="t">'+label+'</span>'+(s.note?'<div class="s">'+s.note+'</div>':'')+(s.min?'<div class="s">ca. '+s.min+' min'+(!s.final&&s.topics&&s.topics.some(hasLearn)?' · Lesen + Test':'')+'</div>':(!s.final&&s.topics&&s.topics.some(hasLearn)?'<div class="s">Lesen + Test</div>':''))+(over?'<div class="s bad">nachholen</div>':'')+'</span>'+(on?'':'<button class="btn sm" data-act="runsess" data-x="'+x.id+'" data-s="'+s.id+'">'+IC.play+'</button>')+'</div>'}
 function fixPlan(x,old){var done=(old&&old.fixed&&old.done)||{};return {created:ymd(TODAY),fixed:x.fixver||1,sessions:x.fixplan.map(function(s,i){return {id:s.id||('f'+i),date:s.d,topics:s.t||[],title:s.title,note:s.note,min:s.min,tag:s.tag,final:!!s.final}}),done:done}}
 function ensureFixPlans(){MODS.forEach(function(m){m.exams.forEach(function(x){if(!x.fixplan)return;var p=S.plans[x.id];if(!p||p.fixed!==(x.fixver||1))S.plans[x.id]=fixPlan(x,p)})})}
+/* Lücken-Plan (Standard 28.10.): 5–10 Lerninhalte, „fehlt“ (< 40 %) vor „wackelt“ (40–79 %), jeweils schwächste zuerst; nie Gekonntes.
+   Weniger als 5 Lücken → die Lücken bekommen eine zweite Runde (Vertiefung). Keine Lücken → ehrlich: nur kurz frisch halten. */
 function makePlan(m,x,scores){if(x.fixplan)return fixPlan(x,S.plans[x.id]);
-  var tps=(x.topics||[]).filter(function(t){return tasksOfTopic(t).length});
-  var examD=x.date?pd(x.date):addDays(TODAY,21),days=Math.max(1,dd(TODAY,examD));
-  var horizon=days>21?14:days,studyDays=Math.max(1,horizon-1);
-  var w=tps.map(function(t){return {t:t,w:1-(scores[t]!=null?scores[t]:.5)}}).sort(function(a,b){return b.w-a.w});
-  var weak=w.filter(function(o){return o.w>.2}),strong=w.filter(function(o){return o.w<=.2});
-  var sumW=weak.reduce(function(s,o){return s+o.w},0)||1,cap=Math.max(weak.length,studyDays-strong.length);
-  weak.forEach(function(o){o.n=Math.max(1,Math.round(cap*o.w/sumW))});strong.forEach(function(o){o.n=1});
-  var pool=weak.concat(strong).map(function(o){return {t:o.t,n:o.n}}),slots=[],prev=null;
-  while(pool.some(function(o){return o.n>0})){pool.sort(function(a,b){return b.n-a.n});var o=pool.find(function(p){return p.n>0&&p.t!==prev})||pool.find(function(p){return p.n>0});slots.push(o.t);o.n--;prev=o.t}
-  if(slots.length<studyDays&&slots.length){var base=slots.slice();while(slots.length<studyDays)slots.push(base[slots.length%base.length])}
-  var per=Math.min(2,Math.max(1,Math.ceil(slots.length/studyDays))),sessions=[];
-  for(var i=0;i<studyDays&&slots.length;i++){var tops=uniq(slots.splice(0,per));sessions.push({id:'s'+i,date:ymd(addDays(TODAY,i)),topics:tops})}
+  var tps=(x.topics||[]).filter(function(t){return tasksOfTopic(t).length&&scores[t]!=null});
+  var gaps=tps.filter(function(t){return scores[t]<.8}).sort(function(a,b){var fa=scores[a]<.4?0:1,fb=scores[b]<.4?0:1;return fa-fb||scores[a]-scores[b]});
+  var examD=x.date?pd(x.date):addDays(TODAY,21),days=Math.max(1,dd(TODAY,examD)),horizon=days>21?14:days,studyDays=Math.max(1,horizon-1);
+  var units=[],sessions=[];
+  if(gaps.length){gaps.slice(0,10).forEach(function(t){units.push({t:t,tag:scores[t]<.4?'fehlt':'wackelt'})});
+    for(var k=0;units.length<5;k++){var t=gaps[k%gaps.length];units.push({t:t,tag:'Vertiefung'})}}
+  else tps.sort(function(a,b){return scores[a]-scores[b]}).slice(0,3).forEach(function(t){units.push({t:t,tag:'frisch halten'})});
+  var per=Math.max(1,Math.ceil(units.length/studyDays)),gap=gaps.length?1:Math.max(1,Math.floor(studyDays/Math.max(1,units.length)));
+  for(var i=0;i<units.length;i+=per){var grp=units.slice(i,i+per),day=Math.min(studyDays-1,Math.floor(i/per)*gap);
+    sessions.push({id:'s'+(i/per),date:ymd(addDays(TODAY,day)),topics:uniq(grp.map(function(u){return u.t})),tag:grp[0].tag})}
   sessions.push({id:'final',date:ymd(addDays(TODAY,Math.max(0,horizon-1))),final:true,topics:[]});
-  return {created:ymd(TODAY),sessions:sessions,done:{}};
+  return {created:ymd(TODAY),sessions:sessions,done:{},nogaps:!gaps.length};
 }
 function avg(o){var k=Object.keys(o);return k.length?k.reduce(function(s,t){return s+o[t]},0)/k.length:0}
 function startDiag(xid,isFinal){var m,x;MODS.forEach(function(mm){mm.exams.forEach(function(xx){if(xx.id===xid){m=mm;x=xx}})});if(!x)return;
   if(!isFinal&&S.plans[x.id]&&!confirmReset){/* Nochmal testen: Plan bleibt, Ergebnis wird als neuer Stand gespeichert */}
-  runItems(diagItems(m,x).map(taskItem),{title:(isFinal?'Abschlusstest ':'Einstufung ')+x.name,mode:'diag',onEnd:function(r){
+  runItems(diagItems(m,x).map(taskItem),{title:(isFinal?'Abschlusstest ':'Einstufung ')+x.name,mode:'diag',keepOrder:true,onEnd:function(r){
     var sc={},n={};r.forEach(function(o){var t=o.item.topic;sc[t]=(sc[t]||0)+o.r;n[t]=(n[t]||0)+1});Object.keys(sc).forEach(function(t){sc[t]=sc[t]/n[t]});
-    var old=S.diag[x.id],html;
+    var old=S.diag[x.id],html,now=Date.now(),seen=Object.assign({},(old&&old.seen)||{});Object.keys(sc).forEach(function(t){seen[t]=now});
+    var merged=Object.assign(diagLast(x.id),sc); /* nicht geprüfte Themen behalten ihren letzten Stand */
     if(isFinal||(old&&S.plans[x.id])){var p=S.plans[x.id];if(p){var fin=p.sessions.find(function(z){return z.final});if(fin)p.done[fin.id]=true}
-      S.diag[x.id]={t:old?old.t:Date.now(),scores:old?old.scores:sc,after:{t:Date.now(),scores:sc}};
+      S.diag[x.id]={t:old?old.t:now,scores:old?old.scores:sc,after:{t:now,scores:merged},seen:seen};
       var a=Math.round(avg(old?old.scores:sc)*100),b=Math.round(avg(sc)*100);
       html='<div class="center"><div class="big">'+b+' %</div><p>'+(old?'Vorher '+a+' % → jetzt '+b+' %. ':'')+(b>=80?'Du bist bereit!':'Die schwachen Themen stehen in deinem Plan.')+'</p>';
-    }else{S.diag[x.id]={t:Date.now(),scores:sc};S.plans[x.id]=makePlan(m,x,sc);
-      var weak=Object.keys(sc).filter(function(t){return sc[t]<.8}).length;
-      html='<div class="center"><div class="big">Fertig!</div><p>'+(weak?weak+' Themen brauchen noch Übung. Dein Lernplan steht.':'Alles sitzt schon gut. Dein Plan hält es frisch.')+'</p>';}
+    }else{S.diag[x.id]={t:now,scores:merged,seen:seen};S.plans[x.id]=makePlan(m,x,merged);
+      var fehlt=Object.keys(sc).filter(function(t){return sc[t]<.4}).length,wack=Object.keys(sc).filter(function(t){return sc[t]>=.4&&sc[t]<.8}).length,sitzt=Object.keys(sc).length-fehlt-wack,np=S.plans[x.id].sessions.filter(function(z){return !z.final}).length;
+      html='<div class="center"><div class="big">Fertig!</div><p><b>'+sitzt+'</b> sitzt · <b>'+wack+'</b> wackelt · <b>'+fehlt+'</b> fehlt</p><p>'+(fehlt+wack?'Dein Lücken-Plan: '+np+' Lerninhalte, das Wichtigste zuerst.':'Alles sitzt, der Plan hält es nur frisch.')+'</p>';}
     save();activity(30);confetti();hMark('diag:'+x.id);
     return html+'<div class="btns" style="justify-content:center"><a class="btn" href="#/fach/'+m.id+'/pruefungen/'+x.id+'" data-act="close">Zum Lernplan</a></div></div>'}});
 }
@@ -892,13 +910,14 @@ function learnSheet(tids,opts){opts=opts||{};var ts=tids.filter(hasLearn);if(!ts
   LEARN_THEN=opts.then||null}
 var LEARN_THEN=null;
 function runSession(xid,sid){var m,x;MODS.forEach(function(mm){mm.exams.forEach(function(xx){if(xx.id===xid){m=mm;x=xx}})});var p=S.plans[xid];if(!p)return;var s=p.sessions.find(function(z){return z.id===sid});if(!s)return;
-  if(s.final&&diagItems(m,x).length){startDiag(xid,true);return}
+  if(s.final&&diagCount(m,x)){startDiag(xid,true);return}
   if(!s.topics.length){sheet('<div class="'+cls(m.id)+' story"><div class="eyebrow">'+esc(x.name)+' · Lernplan</div><h2>'+esc(s.title||'Aufgabe')+'</h2><div class="sp">'+(s.note||'')+'</div><div class="btns" style="margin-top:16px"><button class="btn block" data-act="sessdone" data-x="'+xid+'" data-s="'+sid+'">✓ Erledigt</button></div></div>',{title:s.title||'Lernplan'});return}
   if(!arguments[2]&&s.topics.some(hasLearn)){learnSheet(s.topics,{title:'Lernplan: '+s.topics.map(function(t){return TOPIC[t].name}).join(' + '),then:function(){runSession(xid,sid,true)}});return}
   var cand=[];s.topics.forEach(function(tid){shuffle(tasksOfTopic(tid)).sort(function(a,b){return (a.level||1)-(b.level||1)}).forEach(function(t){cand.push(taskItem(t))})});
   var items=pickFresh(cand,9,3);if(!items.length&&cand.length)items=cand.slice(0,5);
+  items=items.slice().sort(function(a,b){return (a.level||1)-(b.level||1)}); /* leicht beginnend, am Ende mittel bis prüfungsschwer */
   var deck=[];s.topics.forEach(function(tid){termsOf(m).forEach(function(t){if(t.topic===tid)deck.push(t)})});
-  runItems(items,{title:s.topics.map(function(t){return TOPIC[t].name}).join(' + '),mode:'practice',onEnd:function(r){p.done[sid]=true;save();activity(20);hMark('plan:'+xid+':'+sid);confetti();
+  runItems(items,{title:s.topics.map(function(t){return TOPIC[t].name}).join(' + '),mode:'practice',keepOrder:true,onEnd:function(r){p.done[sid]=true;save();activity(20);hMark('plan:'+xid+':'+sid);confetti();
     var okN=r.filter(function(o){return o.r===1}).length;return '<div class="center"><div class="big">'+okN+' / '+r.length+'</div><p>Einheit geschafft! +20 XP</p><div class="btns" style="justify-content:center"><button class="btn" data-act="close">Fertig</button></div>'+(deck.length?'<p class="small"><a href="#" data-act="deckkeys" data-keys="'+esc(deck.slice(0,10).map(function(t){return t.key}).join('|'))+'">Noch '+Math.min(deck.length,10)+' Karteikarten dazu</a></p>':'')+'</div>'}});
 }
 
@@ -1355,6 +1374,8 @@ var SB_URL='https://qmbkrqsindnyvqjamsvr.supabase.co',SB_KEY='eyJhbGciOiJIUzI1Ni
 function authSave(){try{localStorage.setItem(AUTHKEY,JSON.stringify(AUTH))}catch(e){}}
 function sySave(){try{localStorage.setItem(SYNCKEY,JSON.stringify(SY))}catch(e){}}
 function loggedIn(){return !!(AUTH.access_token&&AUTH.user)}
+/* Befund 38: Solange ein Passwort-/Einladungslink offen ist (AUTH.recovery), nie synchronisieren – sonst landet der lokale Stand in einem fremden Konto. */
+function syncAllowed(){return loggedIn()&&!AUTH.recovery}
 function sbFetch(path,opt,noAuth){opt=opt||{};opt.headers=Object.assign({'apikey':SB_KEY,'Content-Type':'application/json'},opt.headers||{});if(!noAuth&&AUTH.access_token)opt.headers['Authorization']='Bearer '+AUTH.access_token;
   return fetch(SB_URL+path,opt).then(function(r){return r.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null}catch(e){}if(!r.ok){var e=new Error((j&&(j.msg||j.message||j.error_description||j.error))||('Fehler '+r.status));e.status=r.status;throw e}return j})})}
 /* Anmeldung aus localStorage neu lesen: ein anderer Tab kann den Refresh-Token schon erneuert haben (Rotation). */
@@ -1402,7 +1423,7 @@ function mergeByTs(L,R){var out={},LT=L._ts||{},RT=R._ts||{},TS={};
 function applyRemote(R){S=R;SECTIONS.forEach(function(k){S[k]=S[k]||{}});S.xp=S.xp||0;S._ts=S._ts||{};snapInit();
   try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(S.theme)document.documentElement.setAttribute('data-theme',S.theme);if(layer.hidden)rerender()}
 var syBusy=false,syTimer=null;
-function syncNow(quiet){if(!loggedIn()||syBusy||!navigator.onLine)return Promise.resolve();syBusy=true;var uid=AUTH.user&&AUTH.user.id;
+function syncNow(quiet){if(!syncAllowed()||syBusy||!navigator.onLine)return Promise.resolve();syBusy=true;var uid=AUTH.user&&AUTH.user.id;
   return authReady().then(roleFetch).then(function(){return sbAuthed('/rest/v1/progress?select=data,updated_at&user_id=eq.'+uid)}).then(function(rows){
       var R=rows&&rows[0]&&rows[0].data,push=false,fp=JSON.stringify(S._ts||{});stamp();
       if(R&&R._v===2){var M=mergeByTs(S,R);var changedLocal=JSON.stringify(M)!==JSON.stringify(S);var changedRemote=JSON.stringify(M)!==JSON.stringify(R);if(changedLocal){applyRemote(M);if(!quiet)toast('Stand vom anderen Gerät übernommen.')}push=changedRemote}
@@ -1421,7 +1442,7 @@ function roleFetch(){var uid=AUTH.user&&AUTH.user.id;return sbAuthed('/rest/v1/p
   function(e){if(e&&(e.status===404||/PGRST205|42P01|does not exist|schema cache/i.test(String(e.message))))return; /* Tabelle noch nicht angelegt */throw e})}
 function testerCard(){if(SY.role!=='tester'||S.ui.testerOk)return '';
   return '<div class="card tester" style="margin-top:12px"><b>Du bist Tester</b><p class="small" style="margin:6px 0">Du nutzt eine frühe Version der App. Wenn dir ein Fehler auffällt, du eine Idee hast oder dir etwas nicht gefällt: tippe unten rechts auf <b>Melden</b>. Die Meldung geht mit einem Bild der Seite direkt an den Entwickler.</p><p class="small muted" style="margin:0 0 8px">Dein Lernstand wird nur für dein Konto gespeichert und zwischen deinen Geräten abgeglichen.</p><button class="btn sm" data-act="testerok">Verstanden</button></div>'}
-function syLater(){if(!loggedIn())return;clearTimeout(syTimer);syTimer=setTimeout(function(){syncNow(true)},4000)}
+function syLater(){if(!syncAllowed())return;clearTimeout(syTimer);syTimer=setTimeout(function(){syncNow(true)},4000)}
 function syStatus(){if(!loggedIn())return 'Nicht angemeldet';if(SY.err)return '<span class="badc">Problem: '+esc(SY.err)+'</span>';if(!SY.last)return 'Angemeldet, noch nicht synchronisiert';var d=new Date(SY.last);return '<span class="okc">Synchron</span> · zuletzt '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' Uhr'}
 function syncCard(){var u=AUTH.user||{};return '<div class="card"><b>Konto und Geräte-Sync</b><p class="small" style="margin:6px 0">Angemeldet als <b>'+esc(u.email||'')+'</b></p><p class="small" id="systat" style="margin:6px 0">'+syStatus()+'</p><p class="small muted">Fortschritt, Pläne und Einstellungen gleichen sich automatisch ab: beim Öffnen, alle 2 Minuten und kurz nach jeder Änderung. Ohne Internet läuft alles weiter und wird später nachgetragen.</p><div class="btns"><button class="btn sm" data-act="syncnow">Jetzt synchronisieren</button><button class="btn sm ghost" data-act="pwchange">Passwort ändern</button><button class="btn sm ghost" data-act="logout">Abmelden</button></div></div>'}
 function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;D.mods.forEach(function(m){nT+=(m.tasks||[]).length;nF+=(m.formulas||[]).length});var nM=D.mods.filter(function(m){return m.id!=='spa'&&m.id!=='studium'}).length;
