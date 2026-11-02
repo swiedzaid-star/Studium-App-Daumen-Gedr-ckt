@@ -857,3 +857,5 @@ figure.anim.astext .anim-ctl,figure.anim.astext .anim-bar{display:none}
 .eigf .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .item .x.sm{flex:0 0 auto;width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:1.1rem;cursor:pointer;margin-left:6px}
 .item .x.sm:hover{color:var(--ink)}
+
+#radar a,#radar .s{overflow-wrap:anywhere;word-break:break-word} /* lange Quellen-Links umbrechen (Befund 53) */

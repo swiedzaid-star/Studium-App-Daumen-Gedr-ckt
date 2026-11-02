@@ -805,14 +805,15 @@ function diagItems(m,x){var pool=diagPool(x),tids=Object.keys(pool);if(!tids.len
   /* ≤ 10 Themen: Rest der 10 Plätze nach Schwäche wieder von vorn (jedes Thema höchstens so oft, wie es Aufgaben hat) */
   for(var r=0;picks.length<10&&r<10;r++)order.forEach(function(t){if(picks.length<10&&picks.filter(function(p){return p===t}).length<pool[t].length)picks.push(t)});
   var used={},out=[],left=picks.slice();
-  DIAG_STUFEN.slice(0,picks.length).forEach(function(L){var best=null;
+  /* schwere Plätze zuerst vergeben (Befund 45): sonst verbrauchen leichte Plätze die wenigen Themen mit Stufe-3-Aufgaben */
+  DIAG_STUFEN.slice(0,picks.length).sort(function(a,b){return b-a}).forEach(function(L){var best=null;
     left.forEach(function(t,i){pool[t].forEach(function(task){if(used[task.id])return;var dist=Math.abs((task.level||1)-L)*2+((task.level||1)<L?1:0); /* bei Gleichstand lieber etwas schwerer als leichter */
       if(!best||dist<best.dist)best={dist:dist,task:task,i:i}})});
     if(best){used[best.task.id]=1;out.push(best.task);left.splice(best.i,1)}});
   return out.sort(function(a,b){return (a.level||1)-(b.level||1)})}
 function examRow(m,x){var p=S.plans[x.id],dg=S.diag[x.id],st;
   if(p){var tot=p.sessions.length,dn=p.sessions.filter(function(s){return p.done[s.id]}).length;st='<span class="chip acc">Plan '+dn+'/'+tot+'</span>'}
-  else if(diagCount(m,x))st='<span class="chip warn">Test offen</span>';else st='<span class="chip">noch kein Stoff</span>';
+  else if(x.date&&pd(x.date)<TODAY)st='<span class="chip">vorbei</span>';else if(diagCount(m,x))st='<span class="chip warn">Test offen</span>';else st='<span class="chip">noch kein Stoff</span>';
   var er=examReady(x);
   return '<a class="item" href="#/fach/'+m.id+'/pruefungen/'+x.id+'"><span class="grow"><span class="kind">'+esc(KIND[x.kind]||x.kind)+'</span><div class="t">'+esc(x.name)+'</div><div class="s">'+(x.date?fmtDY(pd(x.date))+' · '+rel(pd(x.date)):'Termin offen')+'</div>'+(er!=null?rbar(er):'<div style="margin-top:4px">'+st+'</div>')+'</span><span class="chev">'+IC.chev+'</span></a>'}
 function vRadar(m){var r=m.radar;if(!r)return '';
@@ -844,6 +845,7 @@ function vExam(m,x){
   if(er!=null){h+='<section class="sec"><div class="card">'+rbar(er,'Bereit für '+esc(x.name))+'<p class="small muted" style="margin:8px 0 0">Rechnet sich aus deinen Übungen (70 %) und gekonnten Begriffen (30 %) je Thema.</p></div></section>';
     topicsHtml='<section class="sec"><details class="more list"><summary>Alle Themen einzeln lernen und üben</summary>'+(x.topics||[]).map(function(tid){var tp=TOPIC[tid],r=topicReady(tid),l=tp&&LECT[tp.lecture];
       return '<div class="item"><span class="grow"><span class="t">'+esc(tp?tp.name:tid)+'</span>'+(r!=null?rbar(r):'<div class="s">noch kein Stoff</div>')+'</span>'+(hasLearn(tid)?'<button class="btn sm ghost" data-act="learn" data-t="'+tid+'">Lesen</button>':l?'<a class="btn sm ghost" href="#/fach/'+m.id+'/vorlesungen/'+l.id+'">Lesen</a>':'')+(tasksOfTopic(tid).length?'<button class="btn sm soft" data-act="ptopic" data-t="'+tid+'">Üben</button>':'')+'</div>'}).join('')+'</details></section>'}
+  if(x.date&&pd(x.date)<TODAY&&!p){h+='<div class="card empty">Diese Prüfung ist vorbei. Einstufung und Lernplan gibt es nur für kommende Prüfungen.</div>';return h+topicsHtml} /* Befund 49 */
   if(!di.length&&!p){h+='<div class="card empty">Für diese Prüfung gibt es noch keinen Stoff. Sobald die Vorlesungen dazu waren, kommt hier der Einstufungstest.</div>';return h}
   var steps='<div class="steps3"><div class="st'+(dg?' ok':'')+'"><span class="no">'+(dg?IC.check:'1')+'</span><div class="grow"><b>Einstufungstest</b><div class="s muted">'+di.length+' Aufgaben · leicht → prüfungsschwer · ca. '+Math.max(5,Math.round(di.length*1.3))+' min · ehrlich bewerten</div>'+
      '<div class="btns"><button class="btn sm'+(dg?' ghost':'')+'" data-act="diag" data-x="'+x.id+'">'+(dg?'Nochmal testen':'Test starten')+'</button></div></div></div>'+
@@ -877,7 +879,7 @@ function makePlan(m,x,scores){if(x.fixplan)return fixPlan(x,S.plans[x.id]);
   for(var i=0;i<units.length;i+=per){var grp=units.slice(i,i+per),day=Math.min(studyDays-1,Math.floor(i/per)*gap);
     sessions.push({id:'s'+(i/per),date:ymd(addDays(TODAY,day)),topics:uniq(grp.map(function(u){return u.t})),tag:grp[0].tag})}
   sessions.push({id:'final',date:ymd(addDays(TODAY,Math.max(0,horizon-1))),final:true,topics:[]});
-  return {created:ymd(TODAY),sessions:sessions,done:{},nogaps:!gaps.length};
+  return {created:ymd(TODAY),sessions:sessions,done:{},nogaps:!gaps.length,units:units.length};
 }
 function avg(o){var k=Object.keys(o);return k.length?k.reduce(function(s,t){return s+o[t]},0)/k.length:0}
 function startDiag(xid,isFinal){var m,x;MODS.forEach(function(mm){mm.exams.forEach(function(xx){if(xx.id===xid){m=mm;x=xx}})});if(!x)return;
@@ -891,8 +893,8 @@ function startDiag(xid,isFinal){var m,x;MODS.forEach(function(mm){mm.exams.forEa
       var a=Math.round(avg(old?old.scores:sc)*100),b=Math.round(avg(sc)*100);
       html='<div class="center"><div class="big">'+b+' %</div><p>'+(old?'Vorher '+a+' % → jetzt '+b+' %. ':'')+(b>=80?'Du bist bereit!':'Die schwachen Themen stehen in deinem Plan.')+'</p>';
     }else{S.diag[x.id]={t:now,scores:merged,seen:seen};S.plans[x.id]=makePlan(m,x,merged);
-      var fehlt=Object.keys(sc).filter(function(t){return sc[t]<.4}).length,wack=Object.keys(sc).filter(function(t){return sc[t]>=.4&&sc[t]<.8}).length,sitzt=Object.keys(sc).length-fehlt-wack,np=S.plans[x.id].sessions.filter(function(z){return !z.final}).length;
-      html='<div class="center"><div class="big">Fertig!</div><p><b>'+sitzt+'</b> sitzt · <b>'+wack+'</b> wackelt · <b>'+fehlt+'</b> fehlt</p><p>'+(fehlt+wack?'Dein Lücken-Plan: '+np+' Lerninhalte und ein Abschlusstest ('+(np+1)+' Schritte), das Wichtigste zuerst.':'Alles sitzt, der Plan hält es nur frisch ('+(np+1)+' Schritte mit Abschlusstest).')+'</p>';}
+      var fehlt=Object.keys(sc).filter(function(t){return sc[t]<.4}).length,wack=Object.keys(sc).filter(function(t){return sc[t]>=.4&&sc[t]<.8}).length,sitzt=Object.keys(sc).length-fehlt-wack,pl=S.plans[x.id],np=pl.sessions.filter(function(z){return !z.final}).length,nu=pl.units||np;
+      html='<div class="center"><div class="big">Fertig!</div><p><b>'+sitzt+'</b> sitzt · <b>'+wack+'</b> wackelt · <b>'+fehlt+'</b> fehlt</p><p>'+(fehlt+wack?'Dein Lücken-Plan: '+nu+(nu===1?' Lerninhalt':' Lerninhalte')+(nu!==np?' in '+np+(np===1?' Lerneinheit':' Lerneinheiten'):'')+' und ein Abschlusstest ('+(np+1)+' Schritte), das Wichtigste zuerst.':'Alles sitzt, der Plan hält es nur frisch ('+(np+1)+' Schritte mit Abschlusstest).')+'</p>';}
     save();activity(30);confetti();hMark('diag:'+x.id);
     return html+'<div class="btns" style="justify-content:center"><a class="btn" href="#/fach/'+m.id+'/pruefungen/'+x.id+'" data-act="close">Zum Lernplan</a></div></div>'}});
 }
