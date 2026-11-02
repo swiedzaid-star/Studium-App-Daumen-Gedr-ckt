@@ -532,13 +532,19 @@ document.addEventListener('input',function(e){if(e.target.id!=='fsearch')return;
    sonst → kompakte Textkarte. Fehlende Felder werden weggelassen, alte Daten bleiben gültig. */
 function unitOk(u){return u&&!/^\s*[–-]?\s*$/.test(u)}
 function hlIds(p){return p&&p.hl?(Array.isArray(p.hl)?p.hl:[p.hl]):[]}
+/* Mehrere Gleichungen mit \quad nebeneinander (z. B. x=R cos φ, \quad y=…) sind auf dem Handy zu breit:
+   unter 700 px an den \quad der obersten Ebene in Zeilen untereinander umbrechen. */
+function texBreak(t){t=String(t||'');if(innerWidth>=700||t.indexOf('\\quad')<0)return t;var parts=[],d=0,cur='';
+  for(var i=0;i<t.length;i++){var c=t[i];if(c==='{')d++;else if(c==='}')d--;
+    if(d===0&&t.substr(i,5)==='\\quad'&&!/[a-zA-Z]/.test(t[i+5]||'')){parts.push(cur.replace(/[,;]\s*$/,'').trim());cur='';i+=4;continue}cur+=c}
+  parts.push(cur.trim());parts=parts.filter(Boolean);return parts.length>1?'\\begin{gathered}'+parts.join('\\\\')+'\\end{gathered}':t}
 function formulaAnim(f){var H=[];(f.parts||[]).forEach(function(p){hlIds(p).forEach(function(x){if(H.indexOf(x)<0)H.push(x)})});
   var dim=function(keep){var o={};H.forEach(function(x){o[x]={opacity:keep.indexOf(x)>=0?1:.25}});return o},all=dim(H),st=[];
-  st.push({t:(f.what?'<b>'+f.what+'</b>':'')+(f.why?(f.what?'<br>':'')+'<b>Wozu?</b> '+f.why:''),f:f.tex,set:all});
+  st.push({t:(f.what?'<b>'+f.what+'</b>':'')+(f.why?(f.what?'<br>':'')+'<b>Wozu?</b> '+f.why:''),f:texBreak(f.tex),set:all});
   (f.parts||[]).forEach(function(p){st.push({t:'<b>Baustein: '+esc(p.name)+'</b> '+mx(p.sym)+'<br>'+(p.d||'')+(p.effect?'<br><span class="muted">Wirkung: '+esc(p.effect)+'</span>':'')+(unitOk(p.unit)?'<br><span class="muted">Einheit: '+esc(p.unit)+'</span>':''),set:dim(hlIds(p))})});
   (f.steps||[]).forEach(function(x,k){st.push({t:'<b>Rechnen '+(k+1)+'/'+f.steps.length+':</b> '+(x.t||'')+(x.why?'<span class="why">Warum: '+x.why+'</span>':''),f:x.f||undefined,set:all})});
   (f.mistakes||[]).forEach(function(m){st.push({t:'<b>Typischer Fehler</b><br><span class="bad-x">✗</span> '+m,set:all})});
-  st.push({t:'<b>Ergebnis</b>'+(unitOk(f.unit)?'<br>Einheit: '+f.unit:'')+(f.what?'<br><span class="muted">'+f.what+'</span>':''),f:f.tex,set:all});
+  st.push({t:'<b>Ergebnis</b>'+(unitOk(f.unit)?'<br>Einheit: '+f.unit:'')+(f.what?'<br><span class="muted">'+f.what+'</span>':''),f:texBreak(f.tex),set:all});
   return {id:'fx-'+f.id,title:f.name,svg:f.svg||'',steps:st}}
 function lectureAnim(mod,aid){var r=null;((MOD[mod]||{}).lectures||[]).forEach(function(l){(l.anims||[]).forEach(function(a){if(a.id===aid)r=a})});return r}
 function partsList(f){return '<div class="list parts">'+(f.parts||[]).map(function(p,i){var s=p.ref&&D.symbols[p.ref];
@@ -548,7 +554,7 @@ function openFormula(id){var f=FORM[id];if(!f)return;var la=f.anim&&lectureAnim(
   if(f.player===true&&(f.why||(f.steps||[]).length||(f.parts||[]).length)){
     h+=animHtml(formulaAnim(f),{textBtn:true,notitle:true})+'<h3 class="sh">Die Bausteine <span class="chip acc">antippen</span></h3>'+partsList(f)+(la?'<h3 class="sh">Als Animation</h3>'+animHtml(la):'')}
   else{
-    h+='<div class="fxbig">\\['+texSafe(f.tex)+'\\]</div>'+(f.what?'<p class="lead">'+f.what+'</p>':'')+
+    h+='<div class="fxbig">\\['+texSafe(texBreak(f.tex))+'\\]</div>'+(f.what?'<p class="lead">'+f.what+'</p>':'')+
      (f.why?'<h3 class="sh">Wozu?</h3><div class="sp">'+f.why+'</div>':'')+(f.svg?'<figure class="fig">'+f.svg+'</figure>':'')+(la?animHtml(la):'')+
      '<h3 class="sh">Die Bausteine <span class="chip acc">antippen</span></h3>'+partsList(f)+
      ((f.steps||[]).length?'<h3 class="sh">So rechnest du</h3><ol class="fsteps">'+f.steps.map(function(x){return '<li>'+(x.t||'')+(x.f?'<div class="fxs">\\['+texSafe(x.f)+'\\]</div>':'')+(x.why?'<span class="why">Warum: '+x.why+'</span>':'')+'</li>'}).join('')+'</ol>':(f.ex?'<div class="card" style="margin-top:12px"><b>Beispiel:</b> '+f.ex+'</div>':''))+
@@ -886,7 +892,7 @@ function startDiag(xid,isFinal){var m,x;MODS.forEach(function(mm){mm.exams.forEa
       html='<div class="center"><div class="big">'+b+' %</div><p>'+(old?'Vorher '+a+' % → jetzt '+b+' %. ':'')+(b>=80?'Du bist bereit!':'Die schwachen Themen stehen in deinem Plan.')+'</p>';
     }else{S.diag[x.id]={t:now,scores:merged,seen:seen};S.plans[x.id]=makePlan(m,x,merged);
       var fehlt=Object.keys(sc).filter(function(t){return sc[t]<.4}).length,wack=Object.keys(sc).filter(function(t){return sc[t]>=.4&&sc[t]<.8}).length,sitzt=Object.keys(sc).length-fehlt-wack,np=S.plans[x.id].sessions.filter(function(z){return !z.final}).length;
-      html='<div class="center"><div class="big">Fertig!</div><p><b>'+sitzt+'</b> sitzt · <b>'+wack+'</b> wackelt · <b>'+fehlt+'</b> fehlt</p><p>'+(fehlt+wack?'Dein Lücken-Plan: '+np+' Lerninhalte, das Wichtigste zuerst.':'Alles sitzt, der Plan hält es nur frisch.')+'</p>';}
+      html='<div class="center"><div class="big">Fertig!</div><p><b>'+sitzt+'</b> sitzt · <b>'+wack+'</b> wackelt · <b>'+fehlt+'</b> fehlt</p><p>'+(fehlt+wack?'Dein Lücken-Plan: '+np+' Lerninhalte und ein Abschlusstest ('+(np+1)+' Schritte), das Wichtigste zuerst.':'Alles sitzt, der Plan hält es nur frisch ('+(np+1)+' Schritte mit Abschlusstest).')+'</p>';}
     save();activity(30);confetti();hMark('diag:'+x.id);
     return html+'<div class="btns" style="justify-content:center"><a class="btn" href="#/fach/'+m.id+'/pruefungen/'+x.id+'" data-act="close">Zum Lernplan</a></div></div>'}});
 }
@@ -1226,8 +1232,8 @@ document.addEventListener('click',function(e){var b=e.target.closest&&e.target.c
     var n2=ANIM[fig.getAttribute('data-anim')].steps.length;animShow(fig,on?n2-1:0,true);if(on)$$('.anim-st',fig).forEach(function(d){d.classList.add('on')})}
   else if(w==='tempo'){var t=+b.getAttribute('data-t');animPrefSet('tempo',t);$$('[data-aa=tempo]',fig).forEach(function(x){var on=x===b;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on)});if(ANIMRUN&&ANIMRUN.fig===fig)animPlay(fig)}});
 document.addEventListener('keydown',function(e){var fig=e.target.closest&&e.target.closest('figure.anim');if(!fig||e.altKey||e.ctrlKey||e.metaKey)return;var a=ANIM[fig.getAttribute('data-anim')];if(!a)return;var k=+fig.getAttribute('data-k')||0;
-  if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();animStop('step');animShow(fig,k+(e.key==='ArrowRight'?1:-1))}
-  else if(e.key==='Home'||e.key==='End'){e.preventDefault();animStop('step');animShow(fig,e.key==='Home'?0:a.steps.length-1)}
+  if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();animStop('step');fig.setAttribute('data-st','step');animShow(fig,k+(e.key==='ArrowRight'?1:-1))} /* auch nach dem Ende (Befund 44) */
+  else if(e.key==='Home'||e.key==='End'){e.preventDefault();animStop('step');fig.setAttribute('data-st','step');animShow(fig,e.key==='Home'?0:a.steps.length-1)}
   else if((e.key===' '||e.key==='Spacebar')&&e.target===fig){e.preventDefault();if(ANIMRUN&&ANIMRUN.fig===fig){animStop('step');animPrefSet('mode','step')}else{animPrefSet('mode','play');animPlay(fig)}}});
 
 /* ================= Melden (Fehler / Idee / Gefällt mir nicht) mit Momentaufnahme =================
@@ -1249,7 +1255,7 @@ function snapshot(){var w=innerWidth,h=innerHeight,x=scrollX,y=scrollY,inLayer=!
   return loadScript('vendor/html-to-image/html-to-image.js').then(function(){
     var opt=function(pr){return {width:w,height:h,pixelRatio:pr,cacheBust:false,skipAutoScale:true,includeStyleProperties:SNAPSTYLE,backgroundColor:snapBg(),
       style:{transform:'translate('+(-x)+'px,'+(-y)+'px)',transformOrigin:'0 0'},
-      filter:function(n){if(!n||!n.tagName)return true;if(n.id==='meldenbtn'||(n.id==='layer'&&!inLayer)||n.tagName==='MJX-ASSISTIVE-MML'||(n.classList&&(n.classList.contains('toast')||n.classList.contains('nav'))))return false; /* feste Leiste verrutscht beim Verschieben → weglassen */ /* Vorlese-Zwilling der Formeln nicht mitzeichnen */return !(n.tagName==='INPUT'&&/password/i.test(n.type))}}};
+      filter:function(n){if(!n||!n.tagName)return true;if(n.id==='meldenbtn'||(n.id==='layer'&&!inLayer)||n.tagName==='MJX-ASSISTIVE-MML'||(n.classList&&(n.classList.contains('toast')||n.classList.contains('nav')||n.classList.contains('nosnap'))))return false; /* nosnap: z. B. E-Mail-Adresse (Befund 42) */ /* feste Leiste verrutscht beim Verschieben → weglassen */ /* Vorlese-Zwilling der Formeln nicht mitzeichnen */return !(n.tagName==='INPUT'&&/password|email/i.test(n.type))}}};
     var pr=Math.min(window.devicePixelRatio||1,2);
     return htmlToImage.toPng(root,opt(pr)).then(function(png){return png.length*.75>1.9e6?htmlToImage.toPng(root,opt(1)):png})})}
 function meldenSheet(){$$('.toast').forEach(function(t){t.remove()});var arts=[['fehler','Fehler'],['idee','Idee'],['gefaellt-nicht','Gefällt mir nicht']];
@@ -1437,14 +1443,16 @@ function syncNow(quiet){if(!syncAllowed()||syBusy||!navigator.onLine)return Prom
    Konto ohne Profil: kein Sync, klare Meldung (RLS würde ohnehin ablehnen). */
 function roleFetch(){var uid=AUTH.user&&AUTH.user.id;return sbAuthed('/rest/v1/profiles?select=role&user_id=eq.'+uid).then(function(rows){
     var r=rows&&rows[0]&&rows[0].role;if(SY.role!==r){SY.role=r||'';sySave();if(layer.hidden&&/^#\/heute|^$/.test(location.hash))rerender()}
-    if(r==='owner'&&!S.ui.xpfix1){S.ui.xpfix1=1;if((S.xp||0)<1060){S.xp=1060;toast('Level 6 wiederhergestellt.')}save()} /* einmalig: XP nach dem Sync-Fehler vom 26.10. zurück (Level 6 = 1060 XP) */
+    /* XP nach dem Sync-Fehler vom 26.10. zurück (Level 6 = 1060 XP). Geprüft wird der XP-Stand selbst, nicht nur ein Merker:
+       ein Gerät mit altem app.js konnte xpfix1 übernehmen, aber seinen niedrigeren XP-Stand behalten und zurückschicken. */
+    if(r==='owner'&&!S.ui.xpfix2&&(S.xp||0)<1060){S.xp=1060;S.ui.xpfix2=1;toast('Level 6 wiederhergestellt.');save()}
     if(!r){var e=new Error('Dein Konto ist noch nicht freigeschaltet. Bitte melde dich beim Inhaber der App.');e.status=403;throw e}},
   function(e){if(e&&(e.status===404||/PGRST205|42P01|does not exist|schema cache/i.test(String(e.message))))return; /* Tabelle noch nicht angelegt */throw e})}
 function testerCard(){if(SY.role!=='tester'||S.ui.testerOk)return '';
   return '<div class="card tester" style="margin-top:12px"><b>Du bist Tester</b><p class="small" style="margin:6px 0">Du nutzt eine frühe Version der App. Wenn dir ein Fehler auffällt, du eine Idee hast oder dir etwas nicht gefällt: tippe unten rechts auf <b>Melden</b>. Die Meldung geht mit einem Bild der Seite direkt an den Entwickler.</p><p class="small muted" style="margin:0 0 8px">Dein Lernstand wird nur für dein Konto gespeichert und zwischen deinen Geräten abgeglichen.</p><button class="btn sm" data-act="testerok">Verstanden</button></div>'}
 function syLater(){if(!syncAllowed())return;clearTimeout(syTimer);syTimer=setTimeout(function(){syncNow(true)},4000)}
 function syStatus(){if(!loggedIn())return 'Nicht angemeldet';if(SY.err)return '<span class="badc">Problem: '+esc(SY.err)+'</span>';if(!SY.last)return 'Angemeldet, noch nicht synchronisiert';var d=new Date(SY.last);return '<span class="okc">Synchron</span> · zuletzt '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' Uhr'}
-function syncCard(){var u=AUTH.user||{};return '<div class="card"><b>Konto und Geräte-Sync</b><p class="small" style="margin:6px 0">Angemeldet als <b>'+esc(u.email||'')+'</b></p><p class="small" id="systat" style="margin:6px 0">'+syStatus()+'</p><p class="small muted">Fortschritt, Pläne und Einstellungen gleichen sich automatisch ab: beim Öffnen, alle 2 Minuten und kurz nach jeder Änderung. Ohne Internet läuft alles weiter und wird später nachgetragen.</p><div class="btns"><button class="btn sm" data-act="syncnow">Jetzt synchronisieren</button><button class="btn sm ghost" data-act="pwchange">Passwort ändern</button><button class="btn sm ghost" data-act="logout">Abmelden</button></div></div>'}
+function syncCard(){var u=AUTH.user||{};return '<div class="card"><b>Konto und Geräte-Sync</b><p class="small" style="margin:6px 0">Angemeldet als <b class="nosnap">'+esc(u.email||'')+'</b></p><p class="small" id="systat" style="margin:6px 0">'+syStatus()+'</p><p class="small muted">Fortschritt, Pläne und Einstellungen gleichen sich automatisch ab: beim Öffnen, alle 2 Minuten und kurz nach jeder Änderung. Ohne Internet läuft alles weiter und wird später nachgetragen.</p><div class="btns"><button class="btn sm" data-act="syncnow">Jetzt synchronisieren</button><button class="btn sm ghost" data-act="pwchange">Passwort ändern</button><button class="btn sm ghost" data-act="logout">Abmelden</button></div></div>'}
 function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;D.mods.forEach(function(m){nT+=(m.tasks||[]).length;nF+=(m.formulas||[]).length});var nM=D.mods.filter(function(m){return m.id!=='spa'&&m.id!=='studium'}).length;
   return '<div class="lg"><div class="lg-sky" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="lg-in">'+
   '<section class="lg-hero"><div class="lg-mark">'+SQSVG+'</div><p class="lg-kick">WiIng Bau · RWTH Aachen · WS 26/27</p><h1>Dein Semester.<br><span>Ein Plan.</span></h1>'+
@@ -1452,7 +1460,7 @@ function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;D.mods.forEa
   '<p class="lg-by"><b>Von RWTH-Studenten für RWTH-Studenten.</b><span>Gerade: Wirtschaftsingenieurwesen Bau, 1. Semester – weitere Studiengänge folgen.</span></p>'+
   '<ul class="lg-stats"><li><b>'+nM+'</b><span>Fächer</span></li><li><b>'+nT+'</b><span>Aufgaben</span></li><li><b>'+nF+'</b><span>Formeln</span></li><li><b>∞</b><span>Zufallszahlen</span></li></ul></section>'+
   '<section class="lg-card" aria-label="'+(rec?'Neues Passwort setzen':'Anmelden')+'">'+
-  (rec?'<h2>'+(rec==='invite'?'Passwort festlegen':'Neues Passwort')+'</h2><p class="small muted">Für das Konto <b id="pwacct">'+esc((AUTH.user&&AUTH.user.email)||'')+'</b>. Mindestens 12 Zeichen mit Groß- und Kleinbuchstaben, Zahl und Sonderzeichen.</p>'+
+  (rec?'<h2>'+(rec==='invite'?'Passwort festlegen':'Neues Passwort')+'</h2><p class="small muted">Für das Konto <b id="pwacct" class="nosnap">'+esc((AUTH.user&&AUTH.user.email)||'')+'</b>. Mindestens 12 Zeichen mit Groß- und Kleinbuchstaben, Zahl und Sonderzeichen.</p>'+
      '<label class="lg-f"><input id="pwmail" type="email" placeholder=" " autocomplete="email" required><span>Deine E-Mail zur Bestätigung</span></label>'+
      '<label class="lg-f"><input id="pw1" type="password" placeholder=" " autocomplete="new-password"><span>Neues Passwort</span></label>'+
      '<label class="lg-f"><input id="pw2" type="password" placeholder=" " autocomplete="new-password"><span>Noch einmal</span></label>'+
