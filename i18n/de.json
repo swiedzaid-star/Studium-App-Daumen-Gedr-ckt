@@ -244,5 +244,7 @@
  "sp.h.woerter": "Wörter (Lektion {n})",
  "sp.h.uebungen": "Übungen (Lektion {n})",
  "sp.h.stueck": "Lektion {n} am Stück: Wörter und Übungen",
- "sp.h.weiter": "Weiter mit den Übungen …"
+ "sp.h.weiter": "Weiter mit den Übungen …",
+ "ko.erinn.leer": "Wähle oben deine Lernzeit, dann schlagen wir eine Uhrzeit vor.",
+ "heute.ziel.viel": "heute steht mehr an – fang mit dem ersten an, der Rest ist freiwillig"
 }

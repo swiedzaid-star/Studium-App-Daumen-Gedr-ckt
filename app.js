@@ -227,7 +227,8 @@ function saveUI(){S.ui.calOff=UI.calOff;S.ui.calWeekly=UI.calWeekly;S.ui.calGrou
 /* Wichtig für den Monat (Entscheidung 25.10.): Fristen, Prüfungen, Sondertermine (kind 'termin'); keine Einzeltermine von
    Vorlesungen/Übungen (kind 'lv'), keine Wochenstunden, keine Präsenz-/Gruppenübungen. Die Woche zeigt alles. */
 function calImportant(e){return !e.weekly&&e.kind!=='lv'&&!isGroupEv(e)}
-function isGroupEv(e){return /Präsenzübung|Gruppenübung|Kleingruppe|Tutorium/i.test(e.title||'')}
+function isAusfall(e){return /f[äa]llt\b.*aus|fallen\b.*aus|entf[äa]llt|abgesagt|Ausfall/i.test(e.title||'')}
+function isGroupEv(e){return !isAusfall(e)&&/Präsenzübung|Gruppenübung|Kleingruppe|Tutorium/i.test(e.title||'')} /* Befund 85: Absagen nie als Gruppentermin ausblenden */
 function calWeeklyOn(d){var G=(S.ui&&S.ui.grp)||{};return weeklyOn(d).filter(function(e){if(UI.calOff[e.mod])return false;if(e.grpKey)return UI.calGroups&&G[e.grpKey]===e.grp;return UI.calGroups||!isGroupEv(e)})}
 function grpPicker(){var G=(S.ui&&S.ui.grp)||{},keys={};MODS.forEach(function(m){m.weekly.forEach(function(w){if(w.grpKey){(keys[w.grpKey]=keys[w.grpKey]||{mod:m.id,label:w.grpLabel||'Gruppe',opts:[]}).opts.push(w)}})});
   return Object.keys(keys).map(function(k){var o=keys[k];return '<label class="toggle" style="margin-top:6px;gap:8px"><span>'+esc(SHORT[o.mod])+': '+esc(o.label)+'</span><select data-act="grp" data-k="'+k+'" class="search" style="width:auto;min-height:36px;padding:4px 8px"><option value="">keine gewählt</option>'+o.opts.map(function(w){return '<option value="'+esc(w.grp)+'"'+(G[k]===w.grp?' selected':'')+'>'+esc(w.title)+' · '+WD[w.wd]+' '+w.from+'</option>'}).join('')+'</select></label>'}).join('')}
@@ -396,7 +397,7 @@ function vHeute(){
   h+=installCard();h+=testerCard();h+=mvHintCard();
   var sn=symNew().length;if(sn)h+='<a class="alert newsym" href="#/symbole"><b>'+sn+'</b> neue Symbole und Zeichen aus deinen Unterlagen. Jetzt lernen →</a>';
   if(mis.length)h+='<a class="alert" href="#/fristen/verpasst"><b>'+mis.length+'</b> verpasste '+(mis.length===1?'Frist':'Fristen')+'. Kurz anschauen →</a>';
-  var stkH=lern().stil==='stueck';h+='<section class="sec"><h2>'+(stkH?t('heute.stueck'):hs.length===1?t('heute.haeppchen1'):t('heute.haeppchen',{n:hs.length}))+' <span class="chip '+(doneN===hs.length&&hs.length?'ok':'acc')+'">'+doneN+'/'+hs.length+'</span></h2>'+(S.goal?'<p class="small muted hziel">'+t(stkH?'heute.ziel.stueck':'heute.ziel',{min:S.goal})+'</p>':'');
+  var stkH=lern().stil==='stueck';h+='<section class="sec"><h2>'+(stkH?t('heute.stueck'):hs.length===1?t('heute.haeppchen1'):t('heute.haeppchen',{n:hs.length}))+' <span class="chip '+(doneN===hs.length&&hs.length?'ok':'acc')+'">'+doneN+'/'+hs.length+'</span></h2>'+(S.goal?'<p class="small muted hziel">'+t(stkH?'heute.ziel.stueck':'heute.ziel',{min:S.goal})+(hs.reduce(function(a,x){return a+(x.min||0)},0)>S.goal*1.25?' · '+t('heute.ziel.viel'):'')+'</p>':''); /* Befund 84: ehrlich sagen, wenn heute mehr ansteht als das Ziel */
   if(!hs.length)h+='<div class="card empty">Heute nichts Offenes. Gönn dir eine Pause.</div>';
   h+='<div class="stack">';
   hs.forEach(function(x,i){var dn=hDone(x.key);
@@ -914,7 +915,9 @@ function reviewItems(m){
    Fehlt eine Stufe im Bestand, nimmt der Test die nächstbeste Stufe. Weniger als 10 Diagnose-Aufgaben insgesamt → alle. */
 var DIAG_STUFEN=[1,1,1,2,2,2,2,3,3,3];
 function diagLast(xid){var d=S.diag[xid]||{},o={};[d.scores,d.after&&d.after.scores].forEach(function(sc){if(sc)Object.keys(sc).forEach(function(t){o[t]=sc[t]})});return o}
-function diagPool(x){var pool={};(x.topics||[]).forEach(function(tid){var d=tasksOfTopic(tid).filter(function(t){return t.diag});if(d.length)pool[tid]=d});return pool}
+/* Befund 82: nur gelehrte Themen in den Einstufungstest (Vorlesung gehalten bzw. Lektion ohne Datum) – sonst prüfungsschwere Aufgaben zu Stoff, der noch nicht dran war */
+function gelehrt(tid){var tp=TOPIC[tid],l=tp&&LECT[tp.lecture];return !!l&&lecHeld(l)}
+function diagPool(x){var pool={};(x.topics||[]).forEach(function(tid){if(!gelehrt(tid))return;var d=tasksOfTopic(tid).filter(function(t){return t.diag});if(d.length)pool[tid]=d});return pool}
 function diagCount(m,x){var n=0,pool=diagPool(x);Object.keys(pool).forEach(function(t){n+=pool[t].length});return Math.min(10,n)}
 function diagItems(m,x){var pool=diagPool(x),tids=Object.keys(pool);if(!tids.length)return [];
   var seen=(S.diag[x.id]&&S.diag[x.id].seen)||{},last=diagLast(x.id);
@@ -930,6 +933,14 @@ function diagItems(m,x){var pool=diagPool(x),tids=Object.keys(pool);if(!tids.len
     left.forEach(function(t,i){pool[t].forEach(function(task){if(used[task.id])return;var dist=Math.abs((task.level||1)-L)*2+((task.level||1)<L?1:0); /* bei Gleichstand lieber etwas schwerer als leichter */
       if(!best||dist<best.dist)best={dist:dist,task:task,i:i}})});
     if(best){used[best.task.id]=1;out.push(best.task);left.splice(best.i,1)}});
+  /* Befund 82: Geht die Stufen-Verteilung so nicht auf, obwohl der Bestand sie hergibt (wenige Themen mit ungleichen Stufen),
+     dann Stufe für Stufe wählen: je Platz eine Aufgabe genau dieser Stufe, aus dem Thema, das bisher am seltensten dran ist (Rangfolge wie oben) */
+  var soll=DIAG_STUFEN.slice(0,out.length),ist=out.map(function(t){return t.level||1}).sort(),ok=soll.slice().sort().join()===ist.join();
+  if(!ok){var vor={1:0,2:0,3:0};tids.forEach(function(t){pool[t].forEach(function(k){vor[k.level||1]++})});
+    if(soll.every(function(L){return (vor[L]-=1)>=0})){var u2={},cnt={},o2=[];
+      soll.slice().sort(function(a,b){return b-a}).forEach(function(L){var best=null;order.forEach(function(t,i){pool[t].forEach(function(k){if(u2[k.id]||(k.level||1)!==L)return;var sc=(cnt[t]||0)*100+i;if(!best||sc<best.sc)best={sc:sc,k:k,t:t}})});
+        if(best){u2[best.k.id]=1;cnt[best.t]=(cnt[best.t]||0)+1;o2.push(best.k)}});
+      if(o2.length===out.length)out=o2}}
   return out.sort(function(a,b){return (a.level||1)-(b.level||1)})}
 function examRow(m,x){var p=S.plans[x.id],dg=S.diag[x.id],st;
   if(p){var tot=p.sessions.length,dn=p.sessions.filter(function(s){return p.done[s.id]}).length;st='<span class="chip acc">Plan '+dn+'/'+tot+'</span>'}
@@ -1154,7 +1165,7 @@ function vKonto(){var u=AUTH.user||{},L=lern(),ch=chosen()||[],th=S.theme||'auto
     koRow(t('ko.ziel'),koSeg('kogoal',S.goal||10,OBGOALS.map(function(g){return [g[0],g[0]+' min']})),HCOUNT[S.goal||10]===1?t('ob.goal.hp1'):t('ob.goal.hp',{n:HCOUNT[S.goal||10]}))+
     koRow(t('ko.zeit'),koSeg('kozeit',L.zeit||'',OBZEIT.map(function(z){return [z,t('ob.zeit.'+z)]})),L.zeit?t('ob.zeit.'+L.zeit+'.satz'):t('ko.zeit.leer'))+
     koRow(t('ko.stil'),koSeg('kostil',L.stil,OBSTIL.map(function(z){return [z,t('ob.sum.'+z)]})),t('ob.stil.'+L.stil+'.satz'))+
-    koRow(t('ko.erinn'),'<span class="chip">'+t('ko.bald')+'</span>',t('ko.erinn.sub',{uhr:esc(L.uhr||((D.sprueche||{}).erinnerung||{})[L.zeit]||'–')})));
+    koRow(t('ko.erinn'),'<span class="chip">'+t('ko.bald')+'</span>',(L.zeit?t('ko.erinn.sub',{uhr:esc(L.uhr||((D.sprueche||{}).erinnerung||{})[L.zeit]||'–')}):t('ko.erinn.leer'))));
   h+=koSec('ko.darst',koRow(t('ko.design'),koSeg('theme',th,[['auto',t('ko.design.auto')],['light',t('ko.design.hell')],['dark',t('ko.design.dunkel')]]).replace(/data-v=/g,'data-t='))+
     koRow(t('ko.tour'),'<button class="btn sm ghost" data-act="tourreset">'+t('ko.tour.btn')+'</button>'));
   h+=koSec('ko.daten',koRow(t('ko.sync'),'<div><p class="small" id="systat" style="margin:0 0 8px">'+syStatus()+'</p><button class="btn sm" data-act="syncnow">'+t('ko.sync.btn')+'</button></div>',t('ko.sync.sub'))+
@@ -1870,5 +1881,5 @@ function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;D.mods.forEa
 document.addEventListener('keyup',function(e){var c=document.getElementById('lcaps');if(c&&e.getModifierState&&document.activeElement&&document.activeElement.id==='lpw')c.classList.toggle('on',e.getModifierState('CapsLock'))});
 setTimeout(function(){syncNow(true)},1500);setInterval(function(){if(!document.hidden)syncNow(true)},120000);
 document.addEventListener('visibilitychange',function(){syncNow(true)});window.addEventListener('online',function(){syncNow(true)});
-window.__dbg={S:function(){return S},mergeByTs:mergeByTs,spItems:spItems,termQuestions:termQuestions,TERM:function(){return TERM},MOD:MOD,formulaItems:formulaItems,runItems:runItems,dynItems:dynItems,dynEval:dynEval,symGaps:symGaps,symKeys:symKeys,D:D,weeklyOn:weeklyOn,pd:pd};
+window.__dbg={S:function(){return S},isGroupEv:isGroupEv,mergeByTs:mergeByTs,spItems:spItems,termQuestions:termQuestions,TERM:function(){return TERM},MOD:MOD,formulaItems:formulaItems,runItems:runItems,dynItems:dynItems,dynEval:dynEval,symGaps:symGaps,symKeys:symKeys,D:D,weeklyOn:weeklyOn,pd:pd};
 })();
