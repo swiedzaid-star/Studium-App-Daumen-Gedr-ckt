@@ -8,6 +8,9 @@ var layer = document.getElementById('layer');
 /* ---------- Hilfen ---------- */
 function $(s,r){return (r||document).querySelector(s)}
 function $$(s,r){return [].slice.call((r||document).querySelectorAll(s))}
+/* UI-Texte (site/i18n/de.json, vom Bau in den Kern gelegt): t(Schlüssel, {n:3}) ersetzt {n}. Fehlt ein Text → Schlüssel sichtbar */
+function t0(k,o){return t(k,o)} /* in Funktionen, in denen t eine Aufgabe ist */
+function t(k,o){var s=(D.i18n||{})[k];if(s==null)return esc(k);return o?String(s).replace(/\{(\w+)\}/g,function(m,x){return o[x]!=null?o[x]:m}):s}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function wrapTables(h){return String(h==null?'':h).replace(/<table/g,'<div class="scroll"><table').replace(/<\/table>/g,'</table></div>')}
 function mx(s){s=String(s==null?'':s).trim();return /\\\(|\\\[/.test(s)?texSafe(s):'\\('+texSafe(s)+'\\)'}
@@ -23,19 +26,41 @@ var KEY='studium-v1', S;
 var DEVID=(function(){try{var d=localStorage.getItem('device');if(!d){d=Math.random().toString(36).slice(2,10);localStorage.setItem('device',d)}return d}catch(e){return 'x'}})(),DEVNAME=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)?'Handy':'Laptop';
 var SYNCKEY='studium-sync',SY;try{SY=JSON.parse(localStorage.getItem(SYNCKEY))||{}}catch(e){SY={}}
 var AUTHKEY='studium-auth',AUTH;try{AUTH=JSON.parse(localStorage.getItem(AUTHKEY))||{}}catch(e){AUTH={}}
-try{S=JSON.parse(localStorage.getItem(KEY))||{}}catch(e){S={}}
-var SECTIONS=['done','tasks','cards','diag','plans','quiz','rules','todos','days','haeppchen','kr','ui','read','sym','nach','mast','eigene'],SCALARS=['xp','name','theme'];
+/* Befund 70: Lernstände von außen (Datei-Import, Sync, alter localStorage) werden VOR jeder Nutzung bereinigt:
+   bekannte Felder mit festen Typen und Wertebereichen, unbekannte Felder weg, in Abschnitten keine HTML-Tags mit Attributen. */
+var LERN_ZEIT=['morgens','nachmittags','abends','spaet'],LERN_STIL=['haeppchen','stueck'],GOALS=[5,10,15,30],LANGS=['de','en','tr'];
+function safeHtml(v){return v.replace(/<(?!\/?(?:b|i|em|strong|br|sub|sup|u)>)[^>]*>/gi,'')} /* nur nackte Formatierungs-Tags bleiben */
+function cleanDeep(v,d){if(d>8)return null;if(typeof v==='string')return v.indexOf('<')>=0?safeHtml(v):v;if(typeof v==='number')return isFinite(v)?v:0;if(typeof v==='boolean'||v==null)return v;
+  if(Array.isArray(v))return v.map(function(x){return cleanDeep(x,d+1)});if(typeof v==='object'){var o={};Object.keys(v).forEach(function(k){if(k!=='__proto__'&&k!=='constructor'&&k!=='prototype')o[k]=cleanDeep(v[k],d+1)});return o}return null}
+function cleanS(o){if(!o||typeof o!=='object'||Array.isArray(o))return null;var c={},K=D.katalog||{},isObj=function(v){return v&&typeof v==='object'&&!Array.isArray(v)};
+  ['done','tasks','cards','diag','plans','quiz','rules','todos','days','haeppchen','kr','ui','read','sym','nach','mast','eigene'].forEach(function(k){c[k]=isObj(o[k])?cleanDeep(o[k],0):{}});
+  c.xp=typeof o.xp==='number'&&isFinite(o.xp)&&o.xp>0?Math.min(Math.round(o.xp),1e7):0;
+  if('name' in o)c.name=typeof o.name==='string'?(o.name.replace(/[\u0000-\u001f<>"&]/g,'').trim().slice(0,40)||null):null;
+  if('theme' in o)c.theme=o.theme==='light'||o.theme==='dark'?o.theme:null;
+  if('mods' in o){var ids=(K.mods||[]).map(function(k){return k.id});c.mods=Array.isArray(o.mods)?o.mods.filter(function(id,i){return typeof id==='string'&&ids.indexOf(id)>=0&&o.mods.indexOf(id)===i}):null}
+  if('paket' in o)c.paket=(K.pakete||[]).some(function(p){return p.id===o.paket})?o.paket:null;
+  if('lang' in o)c.lang=LANGS.indexOf(o.lang)>=0?o.lang:'de';
+  if('goal' in o)c.goal=GOALS.indexOf(o.goal)>=0?o.goal:null;
+  if('lern' in o){var l=isObj(o.lern)?o.lern:{};c.lern={};if(LERN_ZEIT.indexOf(l.zeit)>=0)c.lern.zeit=l.zeit;if(LERN_STIL.indexOf(l.stil)>=0)c.lern.stil=l.stil;if(typeof l.uhr==='string'&&/^\d\d:\d\d$/.test(l.uhr))c.lern.uhr=l.uhr}
+  if(typeof o.focusLen==='number'&&isFinite(o.focusLen))c.focusLen=Math.max(1,Math.min(180,o.focusLen));
+  var ts={};if(isObj(o._ts))Object.keys(o._ts).forEach(function(sec){var v=o._ts[sec];if(!isObj(v))return;var t0={};Object.keys(v).forEach(function(k){if(typeof v[k]==='number'&&isFinite(v[k]))t0[k]=v[k]});ts[sec]=t0});
+  c._ts=ts;c._v=2;if(typeof o._mod==='number'&&isFinite(o._mod))c._mod=o._mod;return c}
+try{S=cleanS(JSON.parse(localStorage.getItem(KEY)))||{}}catch(e){S={}}
+var SECTIONS=['done','tasks','cards','diag','plans','quiz','rules','todos','days','haeppchen','kr','ui','read','sym','nach','mast','eigene'],SCALARS=['xp','name','theme','mods','paket','lang','goal','lern']; /* mods: gewählte Fächer (null = noch kein Onboarding), paket: Studiengang-Paket, lang: Erklärsprache, goal: Tagesziel min, lern: {zeit,stil,uhr} aus „Wie lernst du?“ */
 SECTIONS.forEach(function(k){S[k]=S[k]||{}});S._ts=S._ts||{};S._v=2;
 /* Zeitstempel je Schlüssel: Beim Speichern wird jeder Abschnitt mit dem letzten Stand verglichen; was sich geändert hat, bekommt
    S._ts[abschnitt][schluessel]=jetzt. Damit kann der Sync später Gerät für Gerät zusammenführen, ohne dass Altes Neues überschreibt. */
-var SNAP={};function snapInit(){SECTIONS.forEach(function(sec){var o=S[sec],sn=SNAP[sec]={};Object.keys(o).forEach(function(k){sn[k]=JSON.stringify(o[k])})});SNAP._s={};SCALARS.forEach(function(k){SNAP._s[k]=JSON.stringify(S[k])})}
+var OBJS=['lern']; /* Befund 73: diese Einstellungen werden je Feld gestempelt und zusammengeführt (lern.zeit, lern.stil, lern.uhr) */
+function subEach(f){OBJS.forEach(function(k){var o=S[k];if(o&&typeof o==='object')Object.keys(o).forEach(function(sub){f(k+'.'+sub,o[sub])})})}
+var SNAP={};function snapInit(){SECTIONS.forEach(function(sec){var o=S[sec],sn=SNAP[sec]={};Object.keys(o).forEach(function(k){sn[k]=JSON.stringify(o[k])})});SNAP._s={};SCALARS.forEach(function(k){SNAP._s[k]=JSON.stringify(S[k])});subEach(function(kk,v){SNAP._s[kk]=JSON.stringify(v)})}
 function stamp(){var now=Date.now();SECTIONS.forEach(function(sec){var o=S[sec]||{},sn=SNAP[sec]||(SNAP[sec]={}),ts=S._ts[sec]=S._ts[sec]||{};
   Object.keys(o).forEach(function(k){var j=JSON.stringify(o[k]);if(sn[k]!==j){sn[k]=j;ts[k]=now}});
   Object.keys(sn).forEach(function(k){if(!(k in o)){delete sn[k];ts[k]=now}})});
-  var ts=S._ts._s=S._ts._s||{};SCALARS.forEach(function(k){var j=JSON.stringify(S[k]);if(SNAP._s[k]!==j){SNAP._s[k]=j;ts[k]=now}})}
+  var ts=S._ts._s=S._ts._s||{};SCALARS.forEach(function(k){var j=JSON.stringify(S[k]);if(SNAP._s[k]!==j){SNAP._s[k]=j;ts[k]=now}});subEach(function(kk,v){var j=JSON.stringify(v);if(SNAP._s[kk]!==j){SNAP._s[kk]=j;ts[kk]=now}})}
 S.xp=S.xp||0; /* vor snapInit, sonst gilt 0 auf einem frischen Gerät als Änderung und überschreibt beim Sync die echten XP */
 snapInit();
-function save(){stamp();S._mod=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(typeof syLater==='function')syLater()}
+var GONE=0; /* nach „Konto löschen“: nichts mehr speichern, auch nicht aus noch laufenden Sync-Versuchen */
+function save(){if(GONE)return;stamp();S._mod=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(typeof syLater==='function')syLater()}
 if(S.theme)document.documentElement.setAttribute('data-theme',S.theme);
 
 /* ---------- Datum ---------- */
@@ -54,20 +79,47 @@ function tmin(t){var m=/(\d{1,2}):(\d{2})/.exec(t||'');return m?(+m[1])*60+(+m[2
 var thisMon=monday(TODAY), nextMon=addDays(thisMon,7), lastMon=addDays(thisMon,-7);
 
 /* ---------- Fächer ---------- */
-var ORDER=['mathe','stat','bsk','bure','gdm','mech'];
-var SHORT={mathe:'Mathe',stat:'Statistik',bsk:'Baustoffkunde',bure:'Buchführung',gdm:'Management',mech:'Mechanik',spa:'Spanisch',studium:'Studium'};
-var MODS=[],MOD={};
-ORDER.forEach(function(id){var m=(D.mods||[]).find(function(x){return x.id===id});if(m){MODS.push(m);MOD[id]=m}});
-(D.mods||[]).forEach(function(m){if(!MOD[m.id]){MODS.push(m);MOD[m.id]=m}});
-var TASK={},TERM={},FORM={},TOPIC={},LECT={};
-MODS.forEach(function(m){
-  ['lectures','topics','tasks','exams','events','weekly','formulas'].forEach(function(k){m[k]=m[k]||[]});
-  m.info=m.info||{};
-  m.topics.forEach(function(t){TOPIC[t.id]=t;t.mod=m.id});
-  m.lectures.forEach(function(l){LECT[l.id]=l;l.mod=m.id;(l.terms||[]).forEach(function(t){t.mod=m.id;t.lecture=l.id;t.key=m.id+':'+t.t;TERM[t.key]=t})});
-  m.tasks.forEach(function(t){t.mod=m.id;TASK[t.id]=t});
-  m.formulas.forEach(function(f){f.mod=m.id;FORM[f.id]=f});
-});
+var ORDER=['mathe','stat','bsk','bure','gdm','mech','de-a1'];
+var SHORT={'de-a1':'Deutsch A1',mathe:'Mathe',stat:'Statistik',bsk:'Baustoffkunde',bure:'Buchführung',gdm:'Management',mech:'Mechanik',spa:'Spanisch',studium:'Studium'};
+/* Fächer-Auswahl (Bauprogramm 02.11., Entscheidungen 1–6): MODS enthält nur die gewählten Fächer (S.mods),
+   damit filtern Fächer, Heute/Häppchen, Kalender, Fristen, Einstufung und Tour automatisch. Abwählen löscht nichts:
+   der Lernstand bleibt unter den Fach-IDs in S. Fach-Dateien lädt boot.js nur für die gewählten, ensureMods() lädt nach. */
+var KAT=D.katalog||{pakete:[],mods:[]},PAKET0=((KAT.pakete||[])[0]||{}).id||null;
+function chosen(){return Array.isArray(S.mods)?S.mods:null}
+function paketMods(pid){var p=(KAT.pakete||[]).find(function(x){return x.id===pid});return p?p.mods.slice():[]}
+function katMod(id){return (KAT.mods||[]).find(function(x){return x.id===id})||null}
+/* Auftrag 13: im Katalog versteckte Fächer (versteckt:true) sind unsichtbar – nicht geladen, nicht wählbar, nicht angezeigt.
+   Wer eins gewählt hatte, behält Wahl und Lernstand. window.__zeigeVersteckt nur für Tests. */
+function sichtbar(id){var k=katMod(id);return !(k&&k.versteckt)||window.__zeigeVersteckt===1}
+var MODS=[],MOD={},TASK={},TERM={},FORM={},TOPIC={},LECT={};
+/* Sprachmodule (C1, SCHEMA.md NACHTRAG 7): Erklärtexte {de,en,tr} – angezeigt in S.lang, sonst en, sonst de.
+   Für die übrige App werden Titel/Namen/Anweisungen als Text in dieser Sprache bereitgestellt (Original bleibt in _x). */
+function spLang(){return LANGS.indexOf(S.lang)>=0?S.lang:'de'}
+function xl(o){if(o==null)return '';if(typeof o!=='object'||Array.isArray(o))return o;var l=spLang();return o[l]!=null?o[l]:o.en!=null?o.en:o.de!=null?o.de:''}
+function spNorm(m){var f=function(o,k){if(o._x&&o._x[k]!==undefined){o[k]=xl(o._x[k]);return}if(o[k]&&typeof o[k]==='object'&&!Array.isArray(o[k])){o._x=o._x||{};o._x[k]=o[k];o[k]=xl(o[k])}};
+  (m.lectures||[]).forEach(function(l){f(l,'title')});(m.topics||[]).forEach(function(t){f(t,'name')});(m.tasks||[]).forEach(function(t){f(t,'q')});
+  /* C1b: je Lektion eine „Prüfung“ ohne Datum = Einstufung über die diag-Aufgaben ihrer Themen (Wortschatz, Grammatik, Sprechen); Lücken-Plan wie bei Vorlesungen */
+  m.exams=(m.exams||[]).filter(function(x){return !x._sp}).concat((m.lectures||[]).map(function(l){return {id:l.id+'-x',_sp:1,name:t('sp.lektion',{n:l.nr||''}),lecture:l.id,topics:(m.topics||[]).filter(function(tp){return tp.lecture===l.id}).map(function(tp){return tp.id})}}))}
+function buildIndex(){var ch=chosen();MODS.length=0;[MOD,TASK,TERM,FORM,TOPIC,LECT].forEach(function(o){Object.keys(o).forEach(function(k){delete o[k]})});
+  var add=function(m){if(!m||MOD[m.id]||(ch&&ch.indexOf(m.id)<0)||!sichtbar(m.id))return;MODS.push(m);MOD[m.id]=m};
+  ORDER.forEach(function(id){add((D.mods||[]).find(function(x){return x.id===id}))});(D.mods||[]).forEach(add);
+  MODS.forEach(function(m){
+    ['lectures','topics','tasks','exams','events','weekly','formulas'].forEach(function(k){m[k]=m[k]||[]});
+    m.info=m.info||{};
+    if(m.kind==='sprache')spNorm(m);
+    m.topics.forEach(function(t){TOPIC[t.id]=t;t.mod=m.id});
+    m.lectures.forEach(function(l){LECT[l.id]=l;l.mod=m.id;(l.terms||[]).forEach(function(t){t.mod=m.id;t.lecture=l.id;t.key=m.id+':'+t.t;TERM[t.key]=t})});
+    m.tasks.forEach(function(t){t.mod=m.id;TASK[t.id]=t});
+    m.formulas.forEach(function(f){f.mod=m.id;FORM[f.id]=f});
+  });EV=null}
+buildIndex();
+/* Fehlende Fach-Dateien nachladen (Onboarding, Fächerwechsel, Gerät ohne Auswahl) – ohne Neustart */
+function ensureMods(ids){var P=window.DATA_PART=window.DATA_PART||{},files=D.files||{},need=(ids||[]).filter(function(id){return files[id]&&!P[id]&&sichtbar(id)});
+  return Promise.all(need.map(function(id){return new Promise(function(ok,bad){var sc=document.createElement('script');sc.src=files[id];sc.onload=function(){ok()};sc.onerror=function(){bad(new Error('Laden fehlgeschlagen: '+files[id]))};document.head.appendChild(sc)})}))
+   .then(function(){(D.mods||[]).forEach(function(m){var part=P[m.id];if(part){m.lectures=part.lectures||[];m.tasks=part.tasks||[];m.formulas=part.formulas||[]}});buildIndex();swKeep()})}
+function swKeep(){try{var c=document.querySelector('script[data-core]'),keep=[c&&c.getAttribute('data-core')].concat((chosen()||[]).filter(sichtbar).map(function(id){return (D.files||{})[id]})).filter(Boolean);
+  if(navigator.serviceWorker&&navigator.serviceWorker.controller)navigator.serviceWorker.controller.postMessage({keep:keep})}catch(e){}}
+function setMods(ids,paket){S.mods=ORDER.filter(function(id){return ids.indexOf(id)>=0}).concat(ids.filter(function(id){return ORDER.indexOf(id)<0}));S.paket=paket||null;save();return ensureMods(S.mods)}
 function cls(id){return 'm-'+(id||'studium')}
 function termsOf(m){var a=[];m.lectures.forEach(function(l){(l.terms||[]).forEach(function(t){a.push(t)})});return a}
 function tasksOfTopic(tid){return MOD[TOPIC[tid]&&TOPIC[tid].mod]?MOD[TOPIC[tid].mod].tasks.filter(function(t){return t.topic===tid}):[]}
@@ -102,7 +154,9 @@ function events(){
     m.events.forEach(function(e){if(e.date)out.push(Object.assign({},e,{mod:m.id}))});
     m.exams.forEach(function(x){if(x.date)out.push({id:x.id,mod:m.id,date:x.date,time:x.time,title:x.name,kind:x.kind,place:x.place,note:x.note,exam:true})});
   });
-  ((D.studium||{}).events||[]).forEach(function(e){out.push(Object.assign({},e,{mod:'studium'}))});
+  if(S.paket){var st=((D.studium||{}).events||[]);st.forEach(function(e){out.push(Object.assign({},e,{mod:'studium'}))});
+    /* Befund 41: Klausuranmeldung steht im Studiengang UND im Fach – nur hier (mit Studiengang) die Fach-Doppelung ausblenden */
+    out=out.filter(function(e){return e.mod==='studium'||e.exam||!/anmeld/i.test(e.title||'')||!st.some(function(z){return z.date===e.date&&/anmeld/i.test(z.title||'')})})}
   Object.keys(S.eigene||{}).forEach(function(id){var o=S.eigene[id];if(o&&o.date&&o.t)out.push({id:id,mod:MOD[o.mod]?o.mod:'studium',date:o.date,time:o.time||'',title:o.t,kind:'frist',own:true})}); /* selbst eingetragen */
   out.forEach(function(e){e.d=pd(e.date);e.tm=tmin(e.time)});
   out.sort(function(a,b){return a.d-b.d||((a.tm||0)-(b.tm||0))});
@@ -183,16 +237,22 @@ function route(keep){try{ensureFixPlans()}catch(e){}
   var v=p[0]||'heute',html='';
   /* Konzentrationsmodus: beim Lernen (einzelne Vorlesung, Karteikarten, Symbole) nur eine ruhige Farbe im Hintergrund, keine Szene, kein Eichhörnchen */
   var focus=(v==='fach'&&MOD[p[1]]&&((p[2]==='vorlesungen'&&p[3])||p[2]==='karten'))||v==='symbole';document.body.classList.toggle('focus',!!focus);
-  document.body.setAttribute('data-page',v==='fach'&&MOD[p[1]]?'fach':v);['mathe','stat','bsk','bure','gdm','mech','spa','studium'].forEach(function(k){document.body.classList.remove('pg-'+k)});if(v==='fach'&&MOD[p[1]])document.body.classList.add('pg-'+p[1]);if(v==='studium'||v==='symbole')document.body.classList.add('pg-studium');
+  document.body.setAttribute('data-page',v==='fach'&&MOD[p[1]]?'fach':v);['mathe','stat','bsk','bure','gdm','mech','spa','studium','de-a1'].forEach(function(k){document.body.classList.remove('pg-'+k)});if(v==='fach'&&MOD[p[1]])document.body.classList.add('pg-'+p[1]);if(v==='studium'||v==='symbole'||v==='konto')document.body.classList.add('pg-studium');
   try{
-    document.body.classList.remove('pg-login');if(!loggedIn()||AUTH.recovery){main.innerHTML=vLogin();meldenBtn();document.body.setAttribute('data-page','login');document.body.classList.add('pg-studium','pg-login');window.scrollTo(0,0);return}
-    if(v==='heute')html=vHeute();
+    document.body.classList.remove('pg-login');
+    if(v==='impressum'||v==='datenschutz'){main.innerHTML=vRecht(v);meldenBtn();document.body.setAttribute('data-page','recht');document.body.classList.add('pg-studium');document.body.classList.toggle('pg-login',!loggedIn()||!!AUTH.recovery);window.scrollTo(0,0);return} /* D1: auch ohne Anmeldung */
+    if(!loggedIn()||AUTH.recovery){main.innerHTML=vLogin();meldenBtn();document.body.setAttribute('data-page','login');document.body.classList.add('pg-studium','pg-login');window.scrollTo(0,0);return}
+    if(S.mods==null&&v!=='start'){startGate();main.innerHTML='<div class="boot"><div class="bootspin"></div><div class="muted small">'+t('ob.laden')+'</div></div>';meldenBtn();return}
+    document.body.classList.toggle('pg-ob',v==='start'&&p[1]!=='edit'); /* erstes Onboarding: ohne Navigation und Melden-Knopf */
+    if(v==='start'){if(S.mods==null&&!OB)obInit(false);html=vStart(p[1]);document.body.classList.add('pg-studium')}
+    else if(v==='heute')html=vHeute();
     else if(v==='kalender')html=vKalender();
     else if(v==='fristen')html=vFristen(p[1]||'bald');
     else if(v==='faecher')html=vFaecher();
     else if(v==='fach'&&MOD[p[1]])html=vFach(MOD[p[1]],p[2]||'woche',p[3]);
-    else if(v==='studium')html=vStudium();
+    else if(v==='studium')html=S.paket?vStudium():vFaecher();
     else if(v==='symbole')html=vSymbole();
+    else if(v==='konto')html=vKonto();
     else html=vHeute();
   }catch(err){html='<div class="wrap"><p class="empty">Hier ist etwas schiefgelaufen: '+esc(err.message)+'</p></div>';console.error(err)}
   main.innerHTML=html;animInit(main);meldenBtn();
@@ -223,8 +283,8 @@ var SQPOS={};
 /* ===== Eichhörnchen-Tour „Lernen beim Tun“: beim ersten Besuch einer Seite 2–4 kurze Erklärungen ===== */
 var TOUR={key:null,i:0,el:null};
 function tourKey(){var p=(location.hash||'#/heute').slice(2).split('/'),v=p[0]||'heute';
-  if(v==='fach'&&MOD[p[1]]){if(p[2]==='vorlesungen'&&p[3])return 'vorlesung';if(p[2]==='karten')return 'karten';if(!p[2]||p[2]==='woche')return 'fach';return null}
-  return ['heute','kalender','fristen','faecher','symbole','studium'].indexOf(v)>=0?v:null}
+  if(v==='fach'&&MOD[p[1]]){if(MOD[p[1]].kind==='sprache')return null;if(p[2]==='vorlesungen'&&p[3])return 'vorlesung';if(p[2]==='karten')return 'karten';if(!p[2]||p[2]==='woche')return 'fach';return null}
+  return ['heute','kalender','fristen','faecher','symbole','studium','konto'].indexOf(v)>=0?v:null}
 function tourFind(st){var all=document.querySelectorAll(st.sel==='nav'?'.nav':'main '+st.sel);for(var i=0;i<all.length;i++){var e=all[i];if(st.has&&(e.textContent||'').indexOf(st.has)<0)continue;if(e.offsetParent!==null||st.sel==='nav')return e}return null}
 function tourOff(){try{return localStorage.getItem('studium-notour')==='1'}catch(e){return false}}
 function tourMaybe(force){var k=tourKey(),steps=k&&D.tour&&D.tour[k];if(!steps||!steps.length||tourOff())return;S.ui=S.ui||{};S.ui.tour=S.ui.tour||{};
@@ -253,27 +313,68 @@ function hideSquirrel(){
 window.addEventListener('resize',function(){clearTimeout(window.__sqt);window.__sqt=setTimeout(hideSquirrel,150)});
 document.addEventListener('click',function(e){var q=e.target.closest&&e.target.closest('.sqh');if(!q)return;e.preventDefault();
   q.classList.remove('hop');void q.offsetWidth;q.classList.add('hop');S.ui.sqn=(S.ui.sqn||0)+1;save();
-  toast('🐿️ '+SQSAY[Math.floor(Math.random()*SQSAY.length)]+' ('+S.ui.sqn+'× gefunden)');
+  var say=SQSAY.concat(sprueche(lern().zeit));toast('🐿️ '+say[Math.floor(Math.random()*say.length)]+' ('+S.ui.sqn+'× gefunden)');
   if(Math.random()<.5){delete SQPOS[location.hash||'#/heute'];setTimeout(hideSquirrel,700)}});
 
 
 /* ================= HEUTE ================= */
-function greet(){var h=NOW.getHours();return h<11?'Guten Morgen':h<17?'Hallo':'Guten Abend'}
+/* ===== „Wie lernst du?“ (B2c): Lernzeit, Lernstil, Tagesziel → Heute ===== */
+function lern(){var l=S.lern||{};return {zeit:l.zeit||null,stil:l.stil==='stueck'?'stueck':'haeppchen',uhr:l.uhr||null}}
+function zeitVon(h){return h>=5&&h<11?'morgens':h>=11&&h<17?'nachmittags':h>=17&&h<22?'abends':'spaet'}
+function sprueche(z){return z&&D.sprueche&&D.sprueche[z]||[]}
+var HCOUNT={5:1,10:3,15:4,30:5}; /* Tagesziel (min) → Anzahl Häppchen auf Heute */
+function hCount(){return HCOUNT[S.goal]||3}
+function greet(){var h=NOW.getHours();if(lern().zeit==='spaet'&&(h>=22||h<5))return t('heute.gruss.eule');return h<11?'Guten Morgen':h<17?'Hallo':'Guten Abend'}
+function sqLine(){var L=lern(),sp=sprueche(L.zeit);if(!sp.length)return '';var s=sp[Math.floor(TODAY.getTime()/864e5)%sp.length];
+  return '<p class="sqline"><span aria-hidden="true">🐿️</span><span>'+(zeitVon(NOW.getHours())===L.zeit?'<b>'+t('heute.lernzeit')+'</b> ':'')+esc(s)+'</span></p>'}
+/* Themen für Themen-Häppchen bzw. „ein Thema am Stück“: Vorlesung war schon, es gibt Aufgaben; nie geübt/schwach zuerst, dann jüngste Vorlesung.
+   Einmal je Tag festgelegt (S.ui.htop), damit ein erledigtes Thema nicht durch das nächste ersetzt wird. */
+function dayTopics(){var d=ymd(TODAY),c=S.ui.htop;if(c&&c.d===d&&c.t.every(function(id){return TOPIC[id]&&MOD[TOPIC[id].mod]}))return c.t;
+  var a=[];MODS.forEach(function(m){(m.topics||[]).forEach(function(tp){var l=LECT[tp.lecture],ld=l&&pd(l.date);if(!ld||!lecHeld(l)||!tasksOfTopic(tp.id).length)return;var r=topicReady(tp.id);a.push({id:tp.id,r:r==null?-1:r,d:ld})})});
+  a.sort(function(x,y){return (x.r>=.8)-(y.r>=.8)||x.r-y.r||y.d-x.d});
+  var ids=a.slice(0,5).map(function(x){return x.id});S.ui.htop={d:d,t:ids};save();return ids}
+/* C1b: Sprachkurs in den Häppchen – nächste nicht abgeschlossene Lektion als „Wörter“ und „Übungen“, Größe nach Tagesziel */
+var SPVOC={5:5,10:10,15:15,30:20},SPEX={5:3,10:5,15:8,30:12};
+function spDone(m,l){return spVocab(l).every(function(v){return S.mast['v:'+v.id]})&&m.tasks.filter(function(x){return x.lecture===l.id}).every(function(x){return S.tasks[x.id]&&S.tasks[x.id].r===1})}
+function spNext(m){return m.lectures.find(function(l){return !spDone(m,l)})||null}
+function spH(stk){var out=[];MODS.forEach(function(m){if(m.kind!=='sprache')return;var l=spNext(m);if(!l)return;var g=S.goal||10,nv=Math.min(SPVOC[g]||10,spVocab(l).length),ne=Math.min(SPEX[g]||5,m.tasks.filter(function(x){return x.lecture===l.id}).length);
+  if(stk){out.push({key:'spl:'+l.id,mod:m.id,title:t('sp.h.stueck',{n:l.nr}),min:g,act:'splek',lec:l.id});return}
+  if(nv)out.push({key:'spw:'+l.id,mod:m.id,title:t('sp.h.woerter',{n:l.nr}),min:Math.max(3,Math.round(nv*.4)),act:'spw',lec:l.id,n:nv});
+  if(ne)out.push({key:'spu:'+l.id,mod:m.id,title:t('sp.h.uebungen',{n:l.nr}),min:Math.max(3,Math.round(ne*1.2)),act:'spu',lec:l.id,n:ne})});return out}
+function spRunVoc(l,n,dir,onEnd){var m=MOD[l.mod],it=pickFresh(spVocItems(m,l,dir),1e9,999).slice(0,n);
+  runItems(it,{title:t(dir==='de'?'sp.voc.de':'sp.voc.x',{l:spLang().toUpperCase()}),mode:'practice',onEnd:function(r){var ok=r.filter(function(o){return o.r===1}).length;activity(10);if(ok===r.length)confetti();if(onEnd)return onEnd(r);
+    return '<div class="center"><div class="big">'+ok+' / '+r.length+'</div><p>'+t('sp.voc.fertig')+'</p><div class="btns" style="justify-content:center"><button class="btn" data-act="close">'+t('sp.fertig')+'</button></div></div>'}})}
+function spRunEx(l,n,onEnd){var m=MOD[l.mod],ts=m.tasks.filter(function(x){return x.lecture===l.id}),offen=ts.filter(function(x){return !(S.tasks[x.id]&&S.tasks[x.id].r===1)});
+  var pick=offen.concat(ts.filter(function(x){return offen.indexOf(x)<0})).slice(0,n||ts.length).sort(function(a,b){return (a.level||1)-(b.level||1)});
+  runItems(spItems(m,pick),{title:l.title,mode:'practice',keepOrder:true,onEnd:onEnd})}
+function spHRun(x){var l=LECT[x.lec];if(!l)return;var fin=function(xp){return function(r){hMark(x.key);activity(xp);var ok=r.filter(function(o){return o.r===1}).length;if(ok===r.length)confetti();
+    return '<div class="center"><div class="big">'+ok+' / '+r.length+'</div><p>'+t('thema.fertig')+'</p><div class="btns" style="justify-content:center"><button class="btn" data-act="close">'+t('sp.fertig')+'</button></div></div>'}};
+  if(x.act==='spw')spRunVoc(l,x.n,TODAY.getDate()%2?'x':'de',fin(0));
+  else if(x.act==='spu')spRunEx(l,x.n,fin(10));
+  else spRunVoc(l,SPVOC[S.goal||10]||10,'de',function(){setTimeout(function(){spRunEx(l,SPEX[S.goal||10]||5,fin(20))},0);return '<div class="center"><p>'+t('sp.h.weiter')+'</p></div>'})}
+function topicH(tid,stk){var tp=TOPIC[tid];return {key:'topic:'+tid,mod:tp.mod,title:t(stk?'heute.stueck.titel':'heute.thema.titel',{t:tp.name}),min:stk?(S.goal||10):8,act:'topic',tid:tid}}
 function haeppchen(){
-  var out=[],used={};
+  var out=[],used={},n=hCount(),stk=lern().stil==='stueck';
   // 1. Lernplan-Einheit von heute (oder verpasste)
   MODS.forEach(function(m){m.exams.forEach(function(x){var p=S.plans[x.id];if(!p)return;if(x.date&&pd(x.date)<TODAY)return; /* Prüfung vorbei: alte Plan-Einheiten nicht mehr nachholen */p.sessions.forEach(function(s){if(!p.done[s.id]&&pd(s.date)<=TODAY&&out.length<1){out.push({key:'plan:'+x.id+':'+s.id,mod:m.id,title:s.title?x.name+': '+s.title:s.final?'Abschlusstest '+x.name:(function(){var tn=s.topics.map(function(t){return TOPIC[t]?TOPIC[t].name:t}).join(' + ');return x.name.indexOf(tn)>=0?'Lernplan '+x.name:'Lernplan '+x.name+': '+tn})(),min:s.min||(s.final?20:12),act:'session',exam:x.id,sid:s.id})}})})});
-  // 2. Einstufungstest der nächsten Prüfung ohne Test
-  if(out.length<1){var best=null;MODS.forEach(function(m){m.exams.forEach(function(x){if(x.date&&pd(x.date)>=TODAY&&dd(TODAY,pd(x.date))<=21&&!S.diag[x.id]&&diagCount(m,x)&&(!best||pd(x.date)<pd(best.x.date)))best={m:m,x:x}})});
-    if(best)out.push({key:'diag:'+best.x.id,mod:best.m.id,title:'Einstufungstest '+best.x.name+' ('+SHORT[best.m.id]+')',min:Math.max(5,Math.round(diagCount(best.m,best.x)*1.3)),act:'diag',exam:best.x.id})}
+  // 2. Einstufungstest der nächsten Prüfung ohne Test (angefangene zweite Hälfte zuerst)
+  if(out.length<1){var best=null;MODS.forEach(function(m){m.exams.forEach(function(x){if(x.date&&pd(x.date)>=TODAY&&dd(TODAY,pd(x.date))<=21&&!S.diag[x.id]&&diagCount(m,x)&&(!best||!!diagHalf(x.id)>!!diagHalf(best.x.id)||!!diagHalf(x.id)===!!diagHalf(best.x.id)&&pd(x.date)<pd(best.x.date)))best={m:m,x:x}})});
+    if(best){var hf=diagHalf(best.x.id),dn=diagCount(best.m,best.x);out.push({key:'diag:'+best.x.id,mod:best.m.id,title:(hf?t('diag.h.titel2',{x:best.x.name}):'Einstufungstest '+best.x.name)+' ('+SHORT[best.m.id]+')',min:Math.max(5,Math.round((hf?hf.ids.length-hf.n:dn)*1.3)),act:'diag',exam:best.x.id})}}
+  // Lernstil „am Stück“: genau eine zusammenhängende Einheit – Lernplan/Einstufung, sonst ein ganzes Thema (Lesen → Karten → Aufgaben leicht → schwer)
+  if(stk){if(out.length){if(out[0].act==='session')out[0].min=Math.max(out[0].min,S.goal||10);return out.slice(0,1)}
+    var tp0=dayTopics()[0];if(tp0)return [topicH(tp0,true)];var sp0=spH(true)[0];if(sp0)return [sp0]}
+  // 2b. Sprachkurs: nächste Lektion (Wörter, Übungen)
+  spH(false).forEach(function(x){out.push(x)});
   // 3. Wiederholung im Fach mit der jüngsten Vorlesung
   var recent=null;MODS.forEach(function(m){m.lectures.forEach(function(l){var d=pd(l.date);if(d&&lecHeld(l)&&reviewItems(m).length&&(!recent||d>recent.d))recent={m:m,d:d}})});
   if(recent)out.push({key:'rev:'+recent.m.id,mod:recent.m.id,title:'Wiederholung '+SHORT[recent.m.id],min:12,act:'review'});
   // 4. Fällige Karteikarten
   var due=dueCards();if(due.length)out.push({key:'cards',mod:due[0].mod,title:Math.min(due.length,20)+' Karteikarten wiederholen',min:Math.max(3,Math.round(Math.min(due.length,20)*.4)),act:'cards'});
   // 5. Auffüllen: Wiederholung in einem anderen Fach
-  if(out.length<3){MODS.forEach(function(m){if(out.length<3&&!out.some(function(o){return o.mod===m.id})&&reviewItems(m).length)out.push({key:'rev:'+m.id,mod:m.id,title:'Wiederholung '+SHORT[m.id],min:12,act:'review'})})}
-  return out.slice(0,3);
+  if(out.length<Math.min(n,3)){MODS.forEach(function(m){if(out.length<Math.min(n,3)&&!out.some(function(o){return o.mod===m.id})&&reviewItems(m).length)out.push({key:'rev:'+m.id,mod:m.id,title:'Wiederholung '+SHORT[m.id],min:12,act:'review'})})}
+  // 6. Mehr Zeit (15/30 min): Themen-Häppchen Lesen → Karten → eine Aufgabe
+  if(out.length<n)dayTopics().forEach(function(tid){if(out.length<n)out.push(topicH(tid,false))});
+  return out.slice(0,n);
 }
 function hDone(k){return S.haeppchen[ymd(TODAY)]&&S.haeppchen[ymd(TODAY)][k]}
 function hMark(k){var d=ymd(TODAY);S.haeppchen[d]=S.haeppchen[d]||{};if(!S.haeppchen[d][k]){S.haeppchen[d][k]=1;save();var hs=haeppchen();if(hs.length&&hs.every(function(h){return hDone(h.key)})){confetti();toast('Alle Häppchen geschafft! +50 XP');activity(50)}}}
@@ -289,13 +390,13 @@ function vHeute(){
   var lv=level(),st=streak(),mis=missed(),hs=haeppchen(),doneN=hs.filter(function(h){return hDone(h.key)}).length;
   var weekEnd=addDays(thisMon,7);
   var wk=upcoming().filter(function(e){return e.d<addDays(TODAY,8)}).slice(0,5);
-  var h='<div class="wrap top"><div class="eyebrow">'+WDL[TODAY.getDay()]+', '+TODAY.getDate()+'. '+MON[TODAY.getMonth()]+'</div><h1>'+greet()+(S.name?', '+esc(S.name):'')+'</h1>'+(S.name?'':'<div class="card" style="margin-top:12px"><b>Wie heißt du?</b><p class="small muted" style="margin:4px 0 8px">Damit die App dich begrüßt. Wird mit deinen Geräten synchronisiert.</p><div class="btns"><input class="search" id="nm" placeholder="Vorname" autocomplete="given-name" style="flex:1;min-width:0"><button class="btn sm" data-act="setname">Speichern</button></div></div>')+
+  var h='<div class="wrap top"><div class="eyebrow">'+WDL[TODAY.getDay()]+', '+TODAY.getDate()+'. '+MON[TODAY.getMonth()]+'</div><h1>'+greet()+(S.name?', '+esc(S.name):'')+'</h1>'+sqLine()+(S.name?'':'<div class="card" style="margin-top:12px"><b>Wie heißt du?</b><p class="small muted" style="margin:4px 0 8px">Damit die App dich begrüßt. Wird mit deinen Geräten synchronisiert.</p><div class="btns"><input class="search" id="nm" placeholder="Vorname" autocomplete="given-name" style="flex:1;min-width:0"><button class="btn sm" data-act="setname">Speichern</button></div></div>')+
    '<div class="stats"><span class="stat"><span class="fire">'+IC.fire+'</span><b>'+st+'</b> '+(st===1?'Tag':'Tage')+' Serie</span><span class="stat">'+IC.bolt+'<b>Level '+lv.l+'</b><span class="bar sm"><span style="width:'+Math.round(lv.cur/lv.need*100)+'%"></span></span></span><button class="stat" data-act="theme" data-t="'+(S.theme==='dark'?'light':S.theme==='light'?'auto':'dark')+'" aria-label="Design wechseln">'+(S.theme==='dark'?'☾ Dunkel':S.theme==='light'?'☀ Hell':'◐ Auto')+'</button></div></div>';
   h+='<div class="wrap">';
-  h+=installCard();h+=testerCard();
+  h+=installCard();h+=testerCard();h+=mvHintCard();
   var sn=symNew().length;if(sn)h+='<a class="alert newsym" href="#/symbole"><b>'+sn+'</b> neue Symbole und Zeichen aus deinen Unterlagen. Jetzt lernen →</a>';
   if(mis.length)h+='<a class="alert" href="#/fristen/verpasst"><b>'+mis.length+'</b> verpasste '+(mis.length===1?'Frist':'Fristen')+'. Kurz anschauen →</a>';
-  h+='<section class="sec"><h2>Deine 3 Häppchen <span class="chip '+(doneN===hs.length&&hs.length?'ok':'acc')+'">'+doneN+'/'+hs.length+'</span></h2>';
+  var stkH=lern().stil==='stueck';h+='<section class="sec"><h2>'+(stkH?t('heute.stueck'):hs.length===1?t('heute.haeppchen1'):t('heute.haeppchen',{n:hs.length}))+' <span class="chip '+(doneN===hs.length&&hs.length?'ok':'acc')+'">'+doneN+'/'+hs.length+'</span></h2>'+(S.goal?'<p class="small muted hziel">'+t(stkH?'heute.ziel.stueck':'heute.ziel',{min:S.goal})+'</p>':'');
   if(!hs.length)h+='<div class="card empty">Heute nichts Offenes. Gönn dir eine Pause.</div>';
   h+='<div class="stack">';
   hs.forEach(function(x,i){var dn=hDone(x.key);
@@ -429,9 +530,10 @@ function vFaecher(){
   MODS.forEach(function(m){var nx=nextExam(m),er=nx?examReady(nx):null,p=er!=null?pct(er):null;
     h+='<a class="tile '+cls(m.id)+'" href="#/fach/'+m.id+'/woche"><span class="n">'+esc(m.name)+'</span><span class="s">'+(m.lectures.length?m.lectures.length+' Vorlesungen · '+termsOf(m).length+' Begriffe':'noch kein Stoff')+'</span>'+
      (p!=null?'<span class="bar sm on-band"><span style="width:'+p+'%"></span></span>':'')+(nx?'<span class="chip">'+esc(nx.name)+(nx.date?' '+rel(pd(nx.date)):' · Termin offen')+'</span>':'')+'</a>'});
-  h+='<a class="tile m-studium" href="#/studium"><span class="n">Mein Studiengang</span><span class="s">Regeln, Fristen, Lernregeln, Einstellungen</span><span class="chip">Studienplan</span></a>';
-  h+='<button class="tile m-mathe" data-act="dyn" style="text-align:left"><span class="n">Dynexite-Eingabe</span><span class="s">-1/2, 2*sqrt(3), exp(-2), abs(x) …</span><span class="chip">Testat-Format</span></button>';
-  h+='<a class="tile m-studium" href="#/symbole"><span class="n">Symbole, Zeichen und Einheiten</span><span class="s">Was bedeutet π, Σ, ∀ …? Und MN → kN → N, N/mm² ↔ MPa</span><span class="chip">'+symKeys().filter(symKnown).length+' / '+symKeys().length+' gekonnt</span>'+(symNew().length?'<span class="chip newc">'+symNew().length+' neu</span>':'')+'<span class="chip">3 Stufen</span></a>';
+  if(S.paket)h+='<a class="tile m-studium" href="#/studium"><span class="n">Mein Studiengang</span><span class="s">Regeln, Fristen, Lernregeln, Einstellungen</span><span class="chip">Studienplan</span></a>';
+  if(MOD.mathe)h+='<button class="tile m-mathe" data-act="dyn" style="text-align:left"><span class="n">Dynexite-Eingabe</span><span class="s">-1/2, 2*sqrt(3), exp(-2), abs(x) …</span><span class="chip">Testat-Format</span></button>';
+  if(MODS.some(function(m){var k=katMod(m.id);return k&&(k.werkzeuge||[]).indexOf('symbole')>=0})&&symKeys().length)h+='<a class="tile m-studium" href="#/symbole"><span class="n">Symbole, Zeichen und Einheiten</span><span class="s">Was bedeutet π, Σ, ∀ …? Und MN → kN → N, N/mm² ↔ MPa</span><span class="chip">'+symKeys().filter(symKnown).length+' / '+symKeys().length+' gekonnt</span>'+(symNew().length?'<span class="chip newc">'+symNew().length+' neu</span>':'')+'<span class="chip">3 Stufen</span></a>';
+  h+='<a class="tile m-studium" href="#/start/edit"><span class="n">'+t('fa.waehlen')+'</span><span class="s">'+t('fa.waehlen.sub')+'</span><span class="chip">'+MODS.length+' / '+(KAT.mods||[]).length+'</span></a>';
   return h+'</div></div>';
 }
 function modProgress(m){var ts=m.tasks;if(!ts.length)return null;var ok=ts.filter(function(t){return res(t.id)===1}).length;return Math.round(ok/ts.length*100)}
@@ -439,6 +541,7 @@ function modProgress(m){var ts=m.tasks;if(!ts.length)return null;var ok=ts.filte
 /* ================= FACH ================= */
 var FTABS=[['woche','Diese Woche'],['vorlesungen','Vorlesungen'],['karten','Karteikarten'],['formeln','Formeln'],['pruefungen','Prüfungen'],['info','Info']];
 function vFach(m,tab,sub){
+  if(m.kind==='sprache')return vSprache(m,tab,sub);
   var nx=nextExam(m);
   var h='<div class="'+cls(m.id)+'"><div class="band"><div class="wrap"><a class="back" href="#/faecher">'+IC.back+' Fächer</a><h1>'+esc(m.name)+'</h1>'+
    (nx?'<div style="margin-top:8px"><span class="chip">'+esc(nx.name)+': '+(nx.date?fmtDY(pd(nx.date))+' · '+rel(pd(nx.date)):'Termin offen')+'</span></div>':'')+
@@ -571,7 +674,7 @@ function openSymbol(id,ctx){var s=D.symbols[id];if(!s)return;
   sheet(h,{title:'Symbol'});
 }
 /* ---------- Symbole: Abfrage ---------- */
-function symKeys(){return Object.keys(D.symbols||{})}
+function symKeys(){var S0=D.symbols||{};return Object.keys(S0).filter(function(k){var md=S0[k].mod;return !md||!!MOD[md]})}
 function symKnown(k){return S.sym[k]===true}
 function symNew(){return symKeys().filter(function(k){return D.symbols[k].added&&!symKnown(k)})}
 function symChunks(){var by={},order=[];symKeys().forEach(function(k){var g=D.symbols[k].group;if(!by[g]){by[g]=[];order.push(g)}by[g].push(k)});var out=[];
@@ -667,7 +770,7 @@ function gradeCard(key,ok){var c=S.cards[key]||{box:0};c.box=ok?Math.min(5,(c.bo
 function runDeck(list,title,onEnd){
   list=list.slice(0,20);if(!list.length){toast('Keine Karten fällig.');return}
   var i=0,ok=0;
-  function draw(){if(i>=list.length){if(onEnd)onEnd(ok,list.length);sheet('<div class="center"><div class="big">'+ok+' / '+list.length+'</div><p>Karten gewusst.</p><div class="btns" style="justify-content:center"><button class="btn" data-act="close">Fertig</button></div></div>',{title:title,replace:true});if(ok===list.length)confetti();rerender();return}
+  function draw(){if(i>=list.length){if(onEnd&&onEnd(ok,list.length)===true)return;sheet('<div class="center"><div class="big">'+ok+' / '+list.length+'</div><p>Karten gewusst.</p><div class="btns" style="justify-content:center"><button class="btn" data-act="close">Fertig</button></div></div>',{title:title,replace:true});if(ok===list.length)confetti();rerender();return}
     var t=list[i];sheet('<div class="prog"><span class="small muted">Karte '+(i+1)+' von '+list.length+'</span><div class="bar"><span style="width:'+Math.round(i/list.length*100)+'%"></span></div></div>'+openTerm(t.key,true)+'<div class="grade two"><button class="g0" id="dk0">Nochmal</button><button class="g2" id="dk1">Wusste ich</button></div>',{title:title,replace:true});
     $('#dk0').onclick=function(){gradeCard(t.key,false);i++;draw()};$('#dk1').onclick=function(){gradeCard(t.key,true);ok++;i++;draw()};}
   draw();
@@ -733,7 +836,9 @@ function startQuiz(opts){
 }
 
 /* ---------- Aufgaben-Runner ---------- */
-function taskItem(t){var g=t.gen&&window.TaskGen?TaskGen.instance(t):null,src=g||t;return {id:t.id,mod:t.mod,type:t.type==='mc'&&t.options?'mc':'open',q:src.q,options:src.options||t.options,correct:t.correct,a:src.a,short:src.short,level:t.level,topic:t.topic,src:t.src,task:t.id,fresh:!!g,raw:t}}
+function taskItem(t){var g=t.gen&&window.TaskGen?TaskGen.instance(t):null,src=g||t;return {id:t.id,mod:t.mod,type:t.type==='mc'&&t.options?'mc':'open',q:src.q,options:src.options||t.options,correct:t.correct,a:src.a,short:src.short,level:t.level,topic:t.topic,src:t.src,task:t.id,fresh:!!g,noShuffle:!!t.noShuffle,raw:t}} /* noShuffle: Lösungsweg nennt Positionen (Befund 58) */
+/* Aufgaben → Runner: Sprachmodule haben eigene Übungstypen (C1), sonst wie bisher */
+function itemsFor(list){var m=list[0]&&MOD[list[0].mod];return m&&m.kind==='sprache'?spItems(m,list):list.map(taskItem)}
 function shuffleOpts(it){if(it.type!=='mc'||!it.options||it.noShuffle)return it;var idx=shuffle(it.options.map(function(_,i){return i}));var c={};for(var k in it)c[k]=it[k];c.options=idx.map(function(i){return it.options[i]});c.correct=idx.indexOf(it.correct);return c}
 function runItems(items,o){
   if(!items.length){toast('Hier gibt es noch keine Aufgaben.');return}
@@ -748,15 +853,30 @@ function runItems(items,o){
       rerender();return}
     cur=items[i];answered=false;
     var t=cur,meta='<div class="qmeta">'+(t.topic&&TOPIC[t.topic]?'<span class="chip acc">'+esc(TOPIC[t.topic].name)+'</span>':'')+(t.level?'<span class="chip '+(t.level===1?'ok':t.level===2?'warn':'bad')+'">'+['','leicht','mittel','Prüfung'][t.level]+'</span>':'')+(t.fresh?'<span class="chip acc">neue Zahlen</span>':'')+(t.src&&t.src!=='eigene'&&!t.fresh?'<span class="chip">'+esc(t.src)+'</span>':'')+'</div>';
-    var body='<div class="qcard '+cls(t.mod)+'">'+meta+'<div class="q">'+wrapTables(t.q)+'</div>';
+    var body='<div class="qcard '+cls(t.mod)+'">'+meta+(t.pre||'')+'<div class="q">'+wrapTables(t.q)+'</div>';
     if(t.type==='mc')body+='<div class="opts">'+t.options.map(function(op,k){return '<button class="opt" data-k="'+k+'"><span class="k">'+'ABCDEF'[k]+'</span><span>'+op+'</span></button>'}).join('')+'</div>';
+    else if(t.type==='cloze'){var gi=0;body+='<form id="clzf" class="clz" autocomplete="off"><p class="clz-t">'+esc(t.text).replace(/___/g,function(){return '<input class="clzi" data-i="'+(gi++)+'" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Lücke '+gi+'">'})+'</p><div class="btns"><button class="btn" type="submit">'+t0('sp.pruefen')+'</button><button class="btn ghost" type="button" id="skip">'+t0('sp.weiss')+'</button></div></form>'}
+    else if(t.type==='order')body+='<div class="ord"><div class="ord-line" id="ordl" aria-label="'+esc(t0('sp.satz'))+'"></div><div class="ord-pool" id="ordp">'+t.pool.map(function(w,k){return '<button class="ord-w" data-k="'+k+'">'+esc(w)+'</button>'}).join('')+'</div><div class="btns"><button class="btn" id="ordok">'+t0('sp.pruefen')+'</button><button class="btn ghost" id="skip">'+t0('sp.weiss')+'</button></div></div>';
     else if(t.type==='typed')body+='<form id="tyf" class="tyf" autocomplete="off"><input id="tyi" class="tyi" type="text"'+(t.inputmode?' inputmode="'+t.inputmode+'"':'')+' placeholder="'+(t.check?'Zahl eintippen':'Begriff eintippen')+'" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="btn" type="submit">Prüfen</button></form><div class="btns"><button class="btn ghost sm" id="skip">Weiß ich nicht</button></div>';
-    else body+='<p class="muted small" style="margin-top:12px">Erst auf Papier rechnen. Dann Lösung aufdecken und ehrlich bewerten.</p><div class="btns"><button class="btn" id="show">Lösung zeigen</button><button class="btn ghost" id="skip">Weiß ich nicht</button></div>';
+    else body+='<p class="muted small" style="margin-top:12px">'+(t.hint||'Erst auf Papier rechnen. Dann Lösung aufdecken und ehrlich bewerten.')+'</p><div class="btns"><button class="btn" id="show">Lösung zeigen</button><button class="btn ghost" id="skip">Weiß ich nicht</button></div>';
     body+='<div id="after"></div></div>';
     sheet(header()+body,{title:o.title,replace:true});
     if(t.type==='mc')$$('.opt',layer).forEach(function(b){b.onclick=function(){if(answered)return;answered=true;var k=+b.getAttribute('data-k'),ok=k===t.correct;
       $$('.opt',layer).forEach(function(x){x.disabled=true;if(+x.getAttribute('data-k')===t.correct)x.classList.add('right')});if(!ok)b.classList.add('wrong');
       if(t.solFor)cur.a=t.solFor(k);record(ok?1:0);showAfter(ok?'<div class="fb ok">Richtig! +10 XP</div>':'<div class="fb bad">Nicht ganz.</div>',true)}});
+    else if(t.type==='cloze'){var ins=$$('.clzi',layer);setTimeout(function(){try{ins[0].focus()}catch(e){}},50);
+      $('#clzf').onsubmit=function(e){e.preventDefault();if(answered)return;answered=true;var nOk=0;
+        ins.forEach(function(inp,k){var v=inp.value.replace(/\s+/g,' ').trim(),ok=(t.answers[k]||[]).some(function(a){return a===v});if(ok)nOk++;inp.disabled=true;inp.classList.add(ok?'right':'wrong');if(!ok)inp.title=(t.answers[k]||[])[0]||''});
+        var f=$('#clzf .btns');if(f)f.remove();record(nOk===ins.length?1:nOk?0.5:0);showAfter(nOk===ins.length?'<div class="fb ok">'+t0('sp.richtig')+'</div>':'<div class="fb bad">'+t0('sp.nicht',{n:nOk,m:ins.length})+'</div>',true)};
+      $('#skip').onclick=function(){if(answered)return;answered=true;ins.forEach(function(i){i.disabled=true});var f=$('#clzf .btns');if(f)f.remove();record(0);showAfter('<div class="fb bad">'+t0('sp.kein')+'</div>',true)}}
+    else if(t.type==='order'){var line=[],pool=t.pool.slice(),dr=function(){$('#ordl').innerHTML=line.map(function(w,k){return '<button class="ord-w on" data-l="'+k+'">'+esc(w)+'</button>'}).join('')||'<span class="ord-ph">'+t0('sp.tippen')+'</span>';
+        $('#ordp').innerHTML=pool.map(function(w,k){return '<button class="ord-w" data-k="'+k+'">'+esc(w)+'</button>'}).join('');
+        $$('#ordp .ord-w',layer).forEach(function(b){b.onclick=function(){if(answered)return;line.push(pool.splice(+b.getAttribute('data-k'),1)[0]);dr()}});
+        $$('#ordl .ord-w',layer).forEach(function(b){b.onclick=function(){if(answered)return;pool.push(line.splice(+b.getAttribute('data-l'),1)[0]);dr()}})};dr();
+      var nrm=function(x){return String(x).replace(/\s+/g,' ').replace(/[.!?]+$/,'').trim()};
+      $('#ordok').onclick=function(){if(answered||!line.length)return;answered=true;var v=nrm(line.join(' ')),ok=[t.answer].concat(t.alt||[]).some(function(a){return nrm(a)===v});
+        $('#ordl').classList.add(ok?'right':'wrong');$$('.ord .btns',layer).forEach(function(x){x.remove()});record(ok?1:0);showAfter(ok?'<div class="fb ok">'+t0('sp.richtig')+'</div>':'<div class="fb bad">'+t0('sp.gesucht')+' <b>'+esc(t.answer)+'</b></div>',true)};
+      $('#skip').onclick=function(){if(answered)return;answered=true;$$('.ord .btns',layer).forEach(function(x){x.remove()});record(0);showAfter('<div class="fb bad">'+t0('sp.gesucht')+' <b>'+esc(t.answer)+'</b></div>',true)}}
     else if(t.type==='typed'){var inp=$('#tyi');setTimeout(function(){try{inp.focus()}catch(e){}},50);
       $('#tyf').onsubmit=function(e){e.preventDefault();if(answered)return;if(!inp.value.trim()){inp.focus();return}answered=true;var ok=t.check?t.check(inp.value):typedOk(inp.value,t.termObj);inp.disabled=true;inp.classList.add(ok?'right':'wrong');$('#tyf button').remove();var sk=$('#skip');if(sk)sk.parentNode.remove();
         record(ok?1:0);showAfter(ok?'<div class="fb ok">Richtig! +10 XP</div>':((t.hint&&t.hint(inp.value))||'')+'<div class="fb bad">Nicht ganz. Gesucht war: <b>'+(t.expect||t.termObj.t)+'</b></div>',true)};
@@ -848,7 +968,7 @@ function vExam(m,x){
   if(x.date&&pd(x.date)<TODAY&&!p){h+='<div class="card empty">Diese Prüfung ist vorbei. Einstufung und Lernplan gibt es nur für kommende Prüfungen.</div>';return h+topicsHtml} /* Befund 49 */
   if(!di.length&&!p){h+='<div class="card empty">Für diese Prüfung gibt es noch keinen Stoff. Sobald die Vorlesungen dazu waren, kommt hier der Einstufungstest.</div>';return h}
   var steps='<div class="steps3"><div class="st'+(dg?' ok':'')+'"><span class="no">'+(dg?IC.check:'1')+'</span><div class="grow"><b>Einstufungstest</b><div class="s muted">'+di.length+' Aufgaben · leicht → prüfungsschwer · ca. '+Math.max(5,Math.round(di.length*1.3))+' min · ehrlich bewerten</div>'+
-     '<div class="btns"><button class="btn sm'+(dg?' ghost':'')+'" data-act="diag" data-x="'+x.id+'">'+(dg?'Nochmal testen':'Test starten')+'</button></div></div></div>'+
+     '<div class="btns"><button class="btn sm'+(dg&&!diagHalf(x.id)?' ghost':'')+'" data-act="diag" data-x="'+x.id+'">'+(diagHalf(x.id)?t('diag.weiter2'):dg?'Nochmal testen':'Test starten')+'</button></div></div></div>'+
    '<div class="st'+(dg?' ok':' dim')+'"><span class="no">'+(dg?IC.check:'2')+'</span><div class="grow"><b>Deine Schwächen</b><div class="s muted">'+(dg?'Stand vom '+fmtD(new Date(dg.t)):'nach dem Test')+'</div></div></div>'+
    '<div class="st'+(p?'':' dim')+'"><span class="no">3</span><div class="grow"><b>Dein Lernplan</b><div class="s muted">'+(p?'läuft':'entsteht automatisch')+'</div></div></div></div>';
   h+='<section class="sec">'+steps+'</section>';
@@ -882,9 +1002,28 @@ function makePlan(m,x,scores){if(x.fixplan)return fixPlan(x,S.plans[x.id]);
   return {created:ymd(TODAY),sessions:sessions,done:{},nogaps:!gaps.length,units:units.length};
 }
 function avg(o){var k=Object.keys(o);return k.length?k.reduce(function(s,t){return s+o[t]},0)/k.length:0}
-function startDiag(xid,isFinal){var m,x;MODS.forEach(function(mm){mm.exams.forEach(function(xx){if(xx.id===xid){m=mm;x=xx}})});if(!x)return;
-  if(!isFinal&&S.plans[x.id]&&!confirmReset){/* Nochmal testen: Plan bleibt, Ergebnis wird als neuer Stand gespeichert */}
-  runItems(diagItems(m,x).map(taskItem),{title:(isFinal?'Abschlusstest ':'Einstufung ')+x.name,mode:'diag',keepOrder:true,onEnd:function(r){
+function diagFind(xid){var o=null;MODS.forEach(function(mm){mm.exams.forEach(function(xx){if(xx.id===xid)o={m:mm,x:xx}})});return o}
+/* Einstufung in zwei Hälften (B2c): nach Hälfte 1 liegen Aufgaben-IDs und Ergebnisse in S.ui.dhalf[x] (synchronisiert), ausgewertet wird erst nach Hälfte 2 */
+function diagHalf(xid){var h=S.ui&&S.ui.dhalf&&S.ui.dhalf[xid];return h&&h.ids&&h.n<h.ids.length?h:null}
+function diagChoose(m,x,n){var h2=Math.ceil(n/2),stk=lern().stil==='stueck';
+  function opt(v,rec){return '<button class="dgc'+(rec?' rec':'')+'" data-act="diaghow" data-x="'+x.id+'" data-v="'+v+'">'+(rec?'<span class="chip acc">'+t('diag.passt')+'</span>':'')+'<b>'+t('diag.'+v)+'</b><span class="s">'+t('diag.'+v+'.sub',{n:v==='halb'?h2:n,min:Math.max(3,Math.round((v==='halb'?h2:n)*1.3))})+'</span></button>'}
+  sheet('<div class="'+cls(m.id)+' dgcw"><h2>'+t('diag.wie')+'</h2><p class="muted">'+t('diag.wie.sub')+'</p>'+(stk?opt('ganz',1)+opt('halb',0):opt('halb',1)+opt('ganz',0))+'</div>',{title:'Einstufung '+x.name})}
+function startDiag(xid,isFinal,how){var f=diagFind(xid);if(!f)return;var m=f.m,x=f.x;
+  var hf=!isFinal&&diagHalf(xid);
+  if(hf){var rest=hf.ids.slice(hf.n).map(function(id){return TASK[id]}).filter(Boolean);
+    if(rest.length){runItems(itemsFor(rest),{title:t('diag.h2',{x:x.name}),mode:'diag',keepOrder:true,onEnd:function(r){
+      var prev=hf.res.map(function(a){return {item:{topic:a[0]},r:a[1]}});delete S.ui.dhalf[xid];return diagFinish(m,x,false,prev.concat(r))}});return}
+    delete S.ui.dhalf[xid];save()}
+  var items=diagItems(m,x);
+  if(!isFinal&&!how&&items.length>=6){diagChoose(m,x,items.length);return}
+  if(how==='halb'&&!isFinal){var n=Math.ceil(items.length/2);
+    runItems(itemsFor(items.slice(0,n)),{title:t('diag.h1',{x:x.name}),mode:'diag',keepOrder:true,onEnd:function(r){
+      S.ui.dhalf=S.ui.dhalf||{};S.ui.dhalf[xid]={ids:items.map(function(o){return o.id}),n:n,res:r.map(function(o){return [o.item.topic,o.r]}),t:Date.now()};
+      save();activity(10);hMark('diag:'+xid);
+      return '<div class="center"><div class="big">'+t('diag.halbzeit')+'</div><p>'+t('diag.halbzeit.sub',{n:items.length-n})+'</p><div class="btns" style="justify-content:center"><button class="btn" data-act="diag" data-x="'+xid+'">'+t('diag.weiter2')+'</button><button class="btn ghost" data-act="close">'+t('diag.spaeter')+'</button></div></div>'}});return}
+  runItems(itemsFor(items),{title:(isFinal?'Abschlusstest ':'Einstufung ')+x.name,mode:'diag',keepOrder:true,onEnd:function(r){return diagFinish(m,x,isFinal,r)}});
+}
+function diagFinish(m,x,isFinal,r){
     var sc={},n={};r.forEach(function(o){var t=o.item.topic;sc[t]=(sc[t]||0)+o.r;n[t]=(n[t]||0)+1});Object.keys(sc).forEach(function(t){sc[t]=sc[t]/n[t]});
     var old=S.diag[x.id],html,now=Date.now(),seen=Object.assign({},(old&&old.seen)||{});Object.keys(sc).forEach(function(t){seen[t]=now});
     var merged=Object.assign(diagLast(x.id),sc); /* nicht geprüfte Themen behalten ihren letzten Stand */
@@ -896,8 +1035,7 @@ function startDiag(xid,isFinal){var m,x;MODS.forEach(function(mm){mm.exams.forEa
       var fehlt=Object.keys(sc).filter(function(t){return sc[t]<.4}).length,wack=Object.keys(sc).filter(function(t){return sc[t]>=.4&&sc[t]<.8}).length,sitzt=Object.keys(sc).length-fehlt-wack,pl=S.plans[x.id],np=pl.sessions.filter(function(z){return !z.final}).length,nu=pl.units||np;
       html='<div class="center"><div class="big">Fertig!</div><p><b>'+sitzt+'</b> sitzt · <b>'+wack+'</b> wackelt · <b>'+fehlt+'</b> fehlt</p><p>'+(fehlt+wack?'Dein Lücken-Plan: '+nu+(nu===1?' Lerninhalt':' Lerninhalte')+(nu!==np?' in '+np+(np===1?' Lerneinheit':' Lerneinheiten'):'')+' und ein Abschlusstest ('+(np+1)+' Schritte), das Wichtigste zuerst.':'Alles sitzt, der Plan hält es nur frisch ('+(np+1)+' Schritte mit Abschlusstest).')+'</p>';}
     save();activity(30);confetti();hMark('diag:'+x.id);
-    return html+'<div class="btns" style="justify-content:center"><a class="btn" href="#/fach/'+m.id+'/pruefungen/'+x.id+'" data-act="close">Zum Lernplan</a></div></div>'}});
-}
+    return html+'<div class="btns" style="justify-content:center"><a class="btn" href="#/fach/'+m.id+'/pruefungen/'+x.id+'" data-act="close">Zum Lernplan</a></div></div>'}
 var confirmReset=false;
 
 /* ================= Lerntext pro Thema (erst lesen, dann Test) ================= */
@@ -921,7 +1059,7 @@ function runSession(xid,sid){var m,x;MODS.forEach(function(mm){mm.exams.forEach(
   if(s.final&&diagCount(m,x)){startDiag(xid,true);return}
   if(!s.topics.length){sheet('<div class="'+cls(m.id)+' story"><div class="eyebrow">'+esc(x.name)+' · Lernplan</div><h2>'+esc(s.title||'Aufgabe')+'</h2><div class="sp">'+(s.note||'')+'</div><div class="btns" style="margin-top:16px"><button class="btn block" data-act="sessdone" data-x="'+xid+'" data-s="'+sid+'">✓ Erledigt</button></div></div>',{title:s.title||'Lernplan'});return}
   if(!arguments[2]&&s.topics.some(hasLearn)){learnSheet(s.topics,{title:'Lernplan: '+s.topics.map(function(t){return TOPIC[t].name}).join(' + '),then:function(){runSession(xid,sid,true)}});return}
-  var cand=[];s.topics.forEach(function(tid){shuffle(tasksOfTopic(tid)).sort(function(a,b){return (a.level||1)-(b.level||1)}).forEach(function(t){cand.push(taskItem(t))})});
+  var cand=[];s.topics.forEach(function(tid){shuffle(tasksOfTopic(tid)).sort(function(a,b){return (a.level||1)-(b.level||1)}).forEach(function(t){itemsFor([t]).forEach(function(it){cand.push(it)})})});
   var items=pickFresh(cand,9,3);if(!items.length&&cand.length)items=cand.slice(0,5);
   items=items.slice().sort(function(a,b){return (a.level||1)-(b.level||1)}); /* leicht beginnend, am Ende mittel bis prüfungsschwer */
   var deck=[];s.topics.forEach(function(tid){termsOf(m).forEach(function(t){if(t.topic===tid)deck.push(t)})});
@@ -949,11 +1087,160 @@ function vStudium(){
   if(st.plan)h+='<section class="sec"><details class="more list"><summary>Studienplan (alle Semester)</summary><div style="padding:0 14px 14px">'+st.plan.map(function(s){return '<h3 style="margin-top:12px">'+s.sem+'. Semester</h3><div class="scroll"><table class="tt" style="width:100%">'+s.module.map(function(md){return '<tr><td>'+esc(md.name)+(md.note?'<div class="small muted">'+esc(md.note)+'</div>':'')+'</td><td style="width:60px">'+(md.cp!=null?md.cp+' CP':'')+'</td></tr>'}).join('')+'</table></div>'}).join('')+'</div></details></section>';
   if(st.kontakte)h+='<section class="sec"><details class="more list"><summary>Ansprechpartner</summary>'+st.kontakte.map(function(k){return '<div class="item"><span class="grow"><span class="t">'+esc(k.name)+'</span><div class="s">'+esc(k.text)+'</div></span></div>'}).join('')+'</details></section>';
   if(st.links)h+='<section class="sec"><details class="more list"><summary>Wichtige Links</summary>'+st.links.map(function(l){return '<a class="item" href="'+esc(l.url)+'" target="_blank" rel="noopener"><span class="grow">'+esc(l.label)+'</span><span class="chev">'+IC.chev+'</span></a>'}).join('')+'</details></section>';
-  var th=S.theme||'auto';
-  h+='<section class="sec"><h2>Einstellungen</h2><div class="card"><button class="btn sm ghost" data-act="tourreset" style="margin-bottom:10px">Erklärungen noch einmal zeigen</button><div class="small muted">Design</div><div class="tabs" style="margin-top:6px">'+[['auto','Automatisch'],['light','Hell'],['dark','Dunkel']].map(function(t){return '<button class="'+(th===t[0]?'on':'')+'" data-act="theme" data-t="'+t[0]+'">'+t[1]+'</button>'}).join('')+'</div>'+
-   '</div>'+syncCard()+'<div class="card"><button class="btn sm ghost" data-act="privacy">Datenschutz und Hinweise</button><button class="btn sm ghost" data-act="terms">Nutzungsbedingungen</button><p class="small muted" style="margin:8px 0 0">© 2026 swiedzaid-star. Alle Rechte vorbehalten.</p></div>'+'<div class="card"><div class="small muted">Oder einmalig von Hand übertragen</div><div class="btns"><button class="btn sm soft" data-act="export">Fortschritt kopieren</button></div><textarea class="ans" id="imp" placeholder="Hier den kopierten Fortschritt einfügen"></textarea><div class="btns"><button class="btn sm ghost" data-act="import">Einfügen und übernehmen</button></div><div id="impmsg" class="small"></div></div></section>';
+  h+='<section class="sec"><a class="item" href="#/konto"><span class="grow"><span class="t">'+t('ko.umzug')+'</span><div class="s">'+t('ko.umzug.sub')+'</div></span><span class="chev">'+IC.chev+'</span></a></section>';
   return h+'<p class="foot">Stand der Inhalte: '+esc((D.meta||{}).built||'')+'</p></div></div>';
 }
+
+/* ================= Sprachmodul (C1): Lektionen, Lektionsseite, Übungen ================= */
+var SPL=[['tr','TR'],['en','EN'],['de','DE']];
+function spSwitch(){var l=spLang();return '<div class="sp-sw" role="group" aria-label="'+esc(t('sp.erkl'))+'"><span class="small">'+t('sp.erkl')+'</span>'+SPL.map(function(o){return '<button class="'+(l===o[0]?'on':'')+'" data-act="splang" data-v="'+o[0]+'" aria-pressed="'+(l===o[0])+'">'+o[1]+'</button>'}).join('')+'</div>'}
+function spVocab(l){return l.vocab||[]}
+function spKnown(l){return spVocab(l).filter(function(v){return S.mast['v:'+v.id]}).length}
+function vSprache(m,tab,sub){if(tab==='pruefungen'&&sub){var x=m.exams.find(function(e){return e.id===sub});if(x){var ll=LECT[x.lecture];return '<div class="'+cls(m.id)+'"><div class="band"><div class="wrap"><a class="back" href="#/fach/'+m.id+(ll?'/lektion/'+ll.id:'')+'">'+IC.back+' '+esc(ll?ll.title:m.name)+'</a><h1>'+esc(x.name)+'</h1>'+spSwitch()+'</div></div><div class="wrap">'+vExam(m,x).replace(/<a class="back2"[^>]*>.*?<\/a>/,'')+'</div></div>'}}
+  var l=tab==='lektion'&&LECT[sub]&&LECT[sub].mod===m.id?LECT[sub]:null;
+  var h='<div class="'+cls(m.id)+'"><div class="band"><div class="wrap"><a class="back" href="'+(l?'#/fach/'+m.id:'#/faecher')+'">'+IC.back+' '+(l?esc(m.name):t('sp.faecher'))+'</a><h1>'+esc(l?l.title:m.name)+'</h1>'+spSwitch()+'</div></div><div class="wrap">';
+  if(l)h+=vLektion(m,l);
+  else h+='<section class="sec"><h2>'+t('sp.lektionen')+'</h2><div class="list">'+m.lectures.map(function(x){var n=spVocab(x).length,k=spKnown(x),nt=m.tasks.filter(function(t){return t.lecture===x.id}).length;
+      return '<a class="item '+cls(m.id)+'" href="#/fach/'+m.id+'/lektion/'+x.id+'"><span class="dot"></span><span class="grow"><span class="t">'+esc(x.title)+'</span><div class="s">'+t('sp.lz',{v:n,u:nt})+(n?' · '+t('sp.gekonnt',{k:k,n:n}):'')+'</div></span><span class="chev">'+IC.chev+'</span></a>'}).join('')+'</div></section>';
+  return h+'</div></div>'}
+function vLektion(m,l){var g=l.grammar||{},goals=xl(l.goals)||[],tasks=m.tasks.filter(function(t){return t.lecture===l.id}),n=spVocab(l).length;
+  var h='<section class="sec"><div class="card sp-go"><b>'+t('sp.ueben')+'</b><div class="btns">'+
+    (n?'<button class="btn" data-act="spvoc" data-l="'+l.id+'" data-d="de">'+t('sp.voc.de',{l:spLang().toUpperCase()})+'</button><button class="btn soft" data-act="spvoc" data-l="'+l.id+'" data-d="x">'+t('sp.voc.x',{l:spLang().toUpperCase()})+'</button>':'')+
+    (tasks.length?'<button class="btn soft" data-act="spex" data-l="'+l.id+'">'+t('sp.uebungen',{n:tasks.length})+'</button>':'')+'</div>'+(n?'<p class="small muted" style="margin:8px 0 0">'+t('sp.gekonnt',{k:spKnown(l),n:n})+'</p>':'')+'</div></section>';
+  var sx=m.exams.find(function(x){return x.lecture===l.id});if(sx&&diagCount(m,sx)){var dg=S.diag[sx.id],pl=S.plans[sx.id];
+    h+='<section class="sec"><a class="item '+cls(m.id)+'" href="#/fach/'+m.id+'/pruefungen/'+sx.id+'"><span class="dot"></span><span class="grow"><span class="t">'+t('sp.einst')+'</span><div class="s">'+(dg?t('sp.einst.ok',{p:Math.round(avg(diagLast(sx.id))*100)})+(pl?' · '+t('sp.plan'):''):t('sp.einst.sub',{n:diagCount(m,sx)}))+'</div></span><span class="chev">'+IC.chev+'</span></a></section>'}
+  if(goals.length)h+='<section class="sec"><h2>'+t('sp.ziele')+'</h2><ul class="sp-goals">'+goals.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul></section>';
+  if(g.title)h+='<section class="sec"><h2>'+esc(xl(g.title))+'</h2><div class="card story"><p>'+esc(xl(g.explain))+'</p>'+(g.table?wrapTables(g.table):'')+
+    ((g.examples||[]).length?'<ul class="sp-ex">'+g.examples.map(function(e){return '<li><b lang="de">'+esc(e.de)+'</b><span class="muted">'+esc(xl(e.x))+'</span></li>'}).join('')+'</ul>':'')+'</div></section>';
+  if(n)h+='<section class="sec"><details class="more list sp-voc"><summary>'+t('sp.wortschatz',{n:n})+'</summary>'+spVocab(l).map(function(v){var k=!!S.mast['v:'+v.id];
+      return '<div class="item'+(k?' done':'')+'"><span class="grow"><span class="t" lang="de">'+esc(v.de)+'</span>'+(v.pl?' <span class="small muted">· '+esc(v.pl)+'</span>':'')+'<div class="s">'+esc(xl(v.x))+(v.ex?' · <i lang="de">'+esc(v.ex)+'</i>':'')+(v.laut?' · '+esc(v.laut):'')+'</div></span>'+(k?'<span class="chip ok">'+t('sp.kann')+'</span>':'')+'</div>'}).join('')+'</details></section>';
+  (l.dialogs||[]).forEach(function(d){h+='<section class="sec"><h2>'+esc(xl(d.title))+'</h2><div class="card">'+spDialog(d,true)+'</div></section>'});
+  return h}
+function spDialog(d,trans){var tr=d.x&&(d.x[spLang()]||d.x.en);
+  return '<div class="sp-dlg">'+(d.lines||[]).map(function(ln,i){return '<p><b>'+esc(ln[0])+':</b> <span lang="de">'+esc(ln[1])+'</span>'+(trans&&tr&&tr[i]&&spLang()!=='de'?'<br><span class="small muted">'+esc(tr[i][1])+'</span>':'')+'</p>'}).join('')+'</div>'}
+function spExpl(t){var x=xl(t.x);return x?'<p class="merke">'+esc(x)+'</p>':''}
+function spItems(m,list){var out=[];list.forEach(function(t){var base={mod:m.id,level:t.level,topic:t.topic,src:'eigene',task:t.id};
+  if(t.type==='mc')out.push(Object.assign({},base,{id:t.id,type:'mc',q:esc(xl(t._x&&t._x.q||t.q)),options:t.options.map(esc),correct:t.correct,noShuffle:!!t.noShuffle,a:'<p><b>'+esc(t.options[t.correct])+'</b></p>'+spExpl(t)}));
+  else if(t.type==='cloze')out.push(Object.assign({},base,{id:t.id,type:'cloze',q:esc(xl(t._x&&t._x.q||t.q)),text:t.text,answers:t.answers,a:'<p lang="de">'+esc(t.text).replace(/___/g,(function(){var i=0;return function(){return '<b>'+esc((t.answers[i++]||[])[0]||'')+'</b>'}})())+'</p>'+spExpl(t)}));
+  else if(t.type==='order'){var w=(t.words||[]).slice(),pool=shuffle(w.slice());for(var r=0;r<5&&pool.join(' ')===t.answer;r++)pool=shuffle(w.slice());
+    out.push(Object.assign({},base,{id:t.id,type:'order',q:esc(xl(t._x&&t._x.q||t.q)),pool:pool,answer:t.answer,alt:t.alt||[],a:'<p lang="de"><b>'+esc(t.answer)+'</b></p>'+spExpl(t)}))}
+  else if(t.type==='dialog'){var d=null;MOD[m.id].lectures.forEach(function(l){(l.dialogs||[]).forEach(function(x){if(x.id===t.dialog)d=x})});
+    var pre=d?'<details class="sp-pre" open><summary>'+esc(xl(d.title))+'</summary>'+spDialog(d,false)+'</details>':'';
+    (t.questions||[]).forEach(function(qq,i){var sub=Object.assign({},qq,{x:t.x,_x:{q:qq.q}});var it=spItems(m,[sub])[0];if(it){it.id=t.id+'#'+i;it.task=t.id;it.pre=pre;it.level=t.level;it.topic=t.topic;it.noShuffle=true;out.push(it)}})}});
+  return out}
+function spVocItems(m,l,dir){return spVocab(l).map(function(v){var x=xl(v.x),de='<span lang="de">'+esc(v.de)+'</span>';
+  return {id:'v:'+v.id,mod:m.id,type:'open',hint:t('sp.voc.hint'),q:'<div class="sp-card">'+(dir==='de'?de:esc(x))+'</div>',a:'<div class="sp-card sm">'+(dir==='de'?esc(x):de)+'</div>'+(v.pl?'<p class="small" lang="de">'+t('sp.plural')+': '+esc(v.pl)+'</p>':'')+(v.ex?'<p class="small" lang="de"><i>'+esc(v.ex)+'</i></p>':'')+(v.laut?'<p class="small muted">'+esc(v.laut)+'</p>':'')}})}
+function spAct(a,el){
+  if(a==='splang'){S.lang=el.getAttribute('data-v');save();MODS.forEach(function(m){if(m.kind==='sprache')spNorm(m)});rerender();return true}
+  if(a==='spvoc'){var l=LECT[el.getAttribute('data-l')],m=l&&MOD[l.mod];if(!m)return true;var d=el.getAttribute('data-d'),it=spVocItems(m,l,d);
+    runItems(pickFresh(it,1e9,it.length).slice(0,20),{title:t(d==='de'?'sp.voc.de':'sp.voc.x',{l:spLang().toUpperCase()}),mode:'practice',onEnd:function(r){var ok=r.filter(function(o){return o.r===1}).length;activity(10);if(ok===r.length)confetti();
+      return '<div class="center"><div class="big">'+ok+' / '+r.length+'</div><p>'+t('sp.voc.fertig')+'</p><div class="btns" style="justify-content:center"><button class="btn" data-act="close">'+t('sp.fertig')+'</button></div></div>'}});return true}
+  if(a==='spex'){var l2=LECT[el.getAttribute('data-l')],m2=l2&&MOD[l2.mod];if(!m2)return true;var it2=spItems(m2,m2.tasks.filter(function(t){return t.lecture===l2.id}).sort(function(a,b){return (a.level||1)-(b.level||1)}));
+    runItems(it2,{title:l2.title,mode:'practice',keepOrder:true});return true}
+  return false}
+
+/* ================= Konto-Seite #/konto (Bauprogramm B3, Plan Nr. 9; ohne Sprachwahl nach Entscheidung 7) =================
+   Profil · Lernen · Darstellung · Daten · Rolle · Rechtliches · Support · Abmelden · Konto löschen (kommt mit D2). */
+var SUPPORT_MAIL='Swied.Zaid@gmail.com'; /* Support-Adresse: EINE Stelle für Konto-Seite, Anmeldeseite, Impressum, Datenschutz (vorläufig, Entscheidung Inhaber 02.11.; build.py prüft gegen docs/rechtstexte.md). Leer = Platzhalter sichtbar */
+function supportMail(){return SUPPORT_MAIL?'<a href="mailto:'+esc(SUPPORT_MAIL)+'">'+esc(SUPPORT_MAIL)+'</a>':'<span class="ph">'+t('ko.support.fehlt')+'</span>'}
+function koSeg(act,cur,opts){return '<div class="tabs koseg" role="group">'+opts.map(function(o){var on=String(cur)===String(o[0]);return '<button class="'+(on?'on':'')+'" data-act="'+act+'" data-v="'+o[0]+'" aria-pressed="'+on+'">'+o[1]+'</button>'}).join('')+'</div>'}
+function koSec(k,body){return '<section class="sec"><h2>'+t(k)+'</h2><div class="card kocard">'+body+'</div></section>'}
+function koRow(lbl,body,sub){return '<div class="korow"><div class="kolbl">'+lbl+(sub?'<span class="s">'+sub+'</span>':'')+'</div>'+body+'</div>'}
+function vKonto(){var u=AUTH.user||{},L=lern(),ch=chosen()||[],th=S.theme||'auto',role=SY.role||'',pk=S.paket&&(KAT.pakete||[]).find(function(x){return x.id===S.paket});
+  var h='<div class="m-studium"><div class="band"><div class="wrap"><h1>'+t('ko.title')+'</h1><p style="opacity:.9">'+(S.name?esc(S.name):t('ko.sub'))+'</p></div></div><div class="wrap konto">';
+  h+=koSec('ko.profil',koRow(t('ko.name'),'<div class="btns" style="margin:0"><input class="search" id="konm" value="'+esc(S.name||'')+'" placeholder="'+esc(t('ko.name.ph'))+'" autocomplete="given-name" maxlength="30"><button class="btn sm" data-act="konm">'+t('ob.speichern')+'</button></div>')+
+    koRow(t('ko.mail'),'<b class="nosnap">'+esc(u.email||'–')+'</b>')+koRow(t('ko.pw'),'<button class="btn sm ghost" data-act="pwchange">'+t('ko.pw.btn')+'</button>'));
+  h+=koSec('ko.lernen',koRow(t('ko.faecher'),'<div>'+(pk?'<div class="small muted">'+esc((pk.kurz||{}).de||pk.name.de||'')+'</div>':'')+obChips(ch)+'<div class="btns"><a class="btn sm soft" href="#/start/edit">'+t('ko.faecher.btn')+'</a></div></div>')+
+    koRow(t('ko.ziel'),koSeg('kogoal',S.goal||10,OBGOALS.map(function(g){return [g[0],g[0]+' min']})),HCOUNT[S.goal||10]===1?t('ob.goal.hp1'):t('ob.goal.hp',{n:HCOUNT[S.goal||10]}))+
+    koRow(t('ko.zeit'),koSeg('kozeit',L.zeit||'',OBZEIT.map(function(z){return [z,t('ob.zeit.'+z)]})),L.zeit?t('ob.zeit.'+L.zeit+'.satz'):t('ko.zeit.leer'))+
+    koRow(t('ko.stil'),koSeg('kostil',L.stil,OBSTIL.map(function(z){return [z,t('ob.sum.'+z)]})),t('ob.stil.'+L.stil+'.satz'))+
+    koRow(t('ko.erinn'),'<span class="chip">'+t('ko.bald')+'</span>',t('ko.erinn.sub',{uhr:esc(L.uhr||((D.sprueche||{}).erinnerung||{})[L.zeit]||'–')})));
+  h+=koSec('ko.darst',koRow(t('ko.design'),koSeg('theme',th,[['auto',t('ko.design.auto')],['light',t('ko.design.hell')],['dark',t('ko.design.dunkel')]]).replace(/data-v=/g,'data-t='))+
+    koRow(t('ko.tour'),'<button class="btn sm ghost" data-act="tourreset">'+t('ko.tour.btn')+'</button>'));
+  h+=koSec('ko.daten',koRow(t('ko.sync'),'<div><p class="small" id="systat" style="margin:0 0 8px">'+syStatus()+'</p><button class="btn sm" data-act="syncnow">'+t('ko.sync.btn')+'</button></div>',t('ko.sync.sub'))+
+    koRow(t('ko.export'),'<button class="btn sm soft" data-act="koexport">'+t('ko.export.btn')+'</button>',t('ko.export.sub'))+
+    koRow(t('ko.import'),'<div><label class="btn sm ghost kofile">'+t('ko.import.btn')+'<input type="file" id="koimp" accept="application/json,.json" hidden></label><div id="koprev"></div></div>',t('ko.import.sub'))+
+    koRow(t('ko.fehler'),koSeg('kofehler',S.ui.fehlerAus?'aus':'an',[['an',t('ko.an')],['aus',t('ko.aus')]]),t('ko.fehler.sub')));
+  h+=koSec('ko.rolle',koRow(t('ko.rolle.du'),'<span class="chip '+(role?'acc':'')+'">'+t(role==='owner'?'ko.rolle.owner':role==='tester'?'ko.rolle.tester':'ko.rolle.keine')+'</span>'));
+  h+=koSec('ko.recht','<div class="btns" style="margin-top:0"><a class="btn sm ghost" href="#/impressum">'+t('recht.impressum')+'</a><a class="btn sm ghost" href="#/datenschutz">'+t('ko.datenschutz')+'</a><button class="btn sm ghost" data-act="terms">'+t('ko.nutzung')+'</button></div>'+
+    '<details class="kolic"><summary>'+t('ko.lizenzen')+'</summary><ul class="small"><li>Plus Jakarta Sans, JetBrains Mono – SIL Open Font License 1.1 (site/vendor/fonts)</li><li>MathJax – Apache License 2.0 (site/vendor/mathjax)</li><li>html-to-image – MIT License (site/vendor/html-to-image)</li></ul><p class="small muted">'+t('ko.lizenzen.sub')+'</p></details>'+
+    '<p class="small muted" style="margin:8px 0 0">© 2026 swiedzaid-star</p>');
+  h+=koSec('ko.support',koRow(t('ko.support.mail'),supportMail(),t('ko.support.sub')));
+  h+='<section class="sec"><div class="btns"><button class="btn ghost" data-act="logout">'+t('ko.logout')+'</button></div>'+
+    '<div class="card kodel"><b>'+t('ko.del')+'</b><p class="small" style="margin:6px 0 8px">'+t('ko.del.sub')+'</p>'+(role==='owner'?'<button class="btn sm danger" disabled aria-disabled="true">'+t('ko.del.btn')+'</button><p class="small muted" style="margin:6px 0 0">'+t('ko.del.owner')+'</p>':'<button class="btn sm danger" data-act="kodel">'+t('ko.del.btn')+'</button>')+'</div></section>';
+  return h+'<p class="foot">'+t('ko.stand',{d:esc((D.meta||{}).built||'')})+'</p></div></div>'}
+/* Fehler-Protokoll (D3): technische Fehler automatisch an die Function feedback (Art fehler-auto).
+   Nur Meldung (300 Zeichen, Mail-Adressen maskiert), Datei:Zeile, App-Version, Seite ohne Parameter – keine E-Mail, kein Bild,
+   kein Lernstand. Höchstens 5 pro Stunde je Gerät (hier gezählt) und je Konto (Server). Abschaltbar: Konto → Daten. */
+var FEHLKEY='studium-fehler',FEHL_SEEN={},FEHL_AN=false;
+function fehlerAuto(msg,src,line,col){try{
+  if(!FEHL_AN||GONE||(S.ui&&S.ui.fehlerAus)||!syncAllowed()||!navigator.onLine)return;
+  var m=String(msg||'Fehler').replace(/[\w.+-]+@[\w-]+\.[\w.]+/g,'<mail>').slice(0,300),file=String(src||'').split('/').pop().split('?')[0].slice(0,60),key=m+'|'+file+':'+line;
+  if(/^Script error\.?$/i.test(m)||(file&&!/^(app|boot|taskgen)\.js$|^data-[\w-]+\.[0-9a-f]+\.js$/.test(file)))return; /* nur Fehler aus der App selbst, nicht aus Erweiterungen/fremden Skripten */
+  if(FEHL_SEEN[key])return;FEHL_SEEN[key]=1;
+  var now=Date.now(),arr=[];try{arr=(JSON.parse(localStorage.getItem(FEHLKEY)||'[]')||[]).filter(function(x){return typeof x==='number'&&now-x<36e5})}catch(e){}
+  if(arr.length>=5)return;arr.push(now);try{localStorage.setItem(FEHLKEY,JSON.stringify(arr))}catch(e){}
+  var body={art:'fehler-auto',text:m+(file?'\nStelle: '+file+':'+(line||0)+':'+(col||0):''),route:(location.hash||'#/heute').split('?')[0].slice(0,120),
+    version:((document.querySelector('script[src*="boot.js"]')||{}).src||'').replace(/.*v=/,'')};
+  authReady().then(function(){return fetch(SB_URL+'/functions/v1/feedback',{method:'POST',headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+AUTH.access_token},body:JSON.stringify(body)})}).catch(function(){})}catch(e){}}
+window.addEventListener('error',function(e){if(e&&e.message)fehlerAuto(e.message,e.filename,e.lineno,e.colno)});
+window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;if(!r||r.status)return; /* erwartete Netz-/Server-Antworten (mit status) sind keine Programmfehler */
+  var st=String(r.stack||'').split('\n')[1]||'',mm=st.match(/([^\/\s(]+\.js)[^:]*:(\d+):(\d+)/);fehlerAuto('Promise: '+(r.message||String(r)),mm&&mm[1],mm&&+mm[2],mm&&+mm[3])});
+setTimeout(function(){FEHL_AN=true},0); /* erst nach dem Start: Fehler beim Laden selbst zeigt die App ohnehin an */
+/* Impressum und Datenschutz (D1): Text aus docs/rechtstexte.md (build.py → D.recht), Support-Adresse aus SUPPORT_MAIL */
+function vRecht(k){var drin=loggedIn()&&!AUTH.recovery,o=k==='impressum'?'datenschutz':'impressum';
+  return '<div class="m-studium"><div class="band"><div class="wrap"><a class="back" href="'+(drin?'#/konto':'#/')+'">'+IC.back+' '+t(drin?'recht.zurueck.konto':'recht.zurueck.login')+'</a><h1>'+t('recht.'+k)+'</h1></div></div><div class="wrap">'+
+    '<section class="sec"><div class="card recht">'+String((D.recht||{})[k]||'<p class="ph">'+t('recht.fehlt')+'</p>').replace(/\{SUPPORT\}/g,supportMail())+'</div></section>'+
+    '<p class="small"><a href="#/'+o+'">'+t('recht.'+o)+' →</a></p></div></div>'}
+/* Konto löschen (D2): zweistufig – Fenster mit Erklärung, Wort eintippen, dann Edge Function delete-account. Danach lokal alles weg. */
+var KODEL_WORT='LÖSCHEN';
+function koDelSheet(){sheet('<div class="kodelw"><h2>'+t('ko.del.frage')+'</h2><p>'+t('ko.del.was')+'</p><ul class="small"><li>'+t('ko.del.p1')+'</li><li>'+t('ko.del.p2')+'</li><li>'+t('ko.del.p3')+'</li></ul>'+
+  '<p class="small muted">'+t('ko.del.tipp')+'</p><label class="small" for="kodelw"><b>'+t('ko.del.eingabe',{w:KODEL_WORT})+'</b></label><input class="search" id="kodelw" autocomplete="off" autocapitalize="characters" spellcheck="false" style="width:100%;margin:6px 0 12px">'+
+  '<div class="btns"><button class="btn danger" id="kodelgo" data-act="kodelgo" disabled>'+t('ko.del.endg')+'</button><button class="btn ghost" data-act="close">'+t('ob.abbrechen')+'</button></div></div>',{title:t('ko.del')})}
+document.addEventListener('input',function(e){if(!e.target||e.target.id!=='kodelw')return;var b=$('#kodelgo');if(b)b.disabled=e.target.value.trim()!==KODEL_WORT});
+function koDelGo(){var w=(($('#kodelw')||{}).value||'').trim(),btn=$('#kodelgo');if(w!==KODEL_WORT)return;if(btn){btn.disabled=true;btn.textContent=t('ko.del.laeuft')}
+  authReady().then(function(){return fetch(SB_URL+'/functions/v1/delete-account',{method:'POST',headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+AUTH.access_token},body:JSON.stringify({bestaetigung:w})})})
+   .then(function(r){return r.json().catch(function(){return {}}).then(function(j){if(!r.ok)throw new Error(j.error||('Fehler '+r.status));return j})})
+   .then(function(){GONE=1;AUTH={};SY={};try{Object.keys(localStorage).filter(function(k){return /^studium/.test(k)||k==='device'}).forEach(function(k){localStorage.removeItem(k)})}catch(e){} /* Befund 78: alle App-Schlüssel (auch studium-recover, studium-anim, device) */closeAll();location.hash='#/';location.reload()},
+     function(e){if(btn){btn.disabled=false;btn.textContent=t('ko.del.endg')}toast(/Failed to fetch|NetworkError/.test(String(e.message))?t('ko.del.offline'):String(e.message||e))})}
+/* Befund 71: Export trägt eine Kontokennung (nur SHA-256-Prüfsummen von Konto-ID und E-Mail, kein Klartext) */
+function sha16(x){try{return crypto.subtle.digest('SHA-256',new TextEncoder().encode('studium:'+x)).then(function(b){return Array.prototype.map.call(new Uint8Array(b).slice(0,8),function(n){return ('0'+n.toString(16)).slice(-2)}).join('')})}catch(e){return Promise.resolve('')}}
+function kontoId(){var u=AUTH.user||{};return Promise.all([sha16(u.id||''),sha16(String(u.email||'').toLowerCase())]).then(function(h){return {u:h[0],m:h[1]}})}
+function koExport(){var n='studium-fortschritt-'+ymd(new Date())+'.json';
+  kontoId().then(function(k){var o=JSON.parse(JSON.stringify(S));o._konto=k;var txt=JSON.stringify(o,null,1);
+    var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'}));a.download=n;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1000);toast(t('ko.export.ok',{n:n}))})
+   .catch(function(e){toast(String(e.message||e))})}
+var KOIMP=null;
+function koSumm(o){var n=function(k){return Object.keys(o[k]||{}).length};return {xp:o.xp||0,mods:Array.isArray(o.mods)?o.mods.length:null,tasks:n('tasks'),cards:n('cards'),done:n('done')}}
+function koPreview(R,herkunft){KOIMP=R;var a=koSumm(S),b=koSumm(R),row=function(k,x,y){return '<tr><td>'+t(k)+'</td><td>'+esc(x)+'</td><td>'+esc(y)+'</td></tr>'},warn=herkunft!=='gleich';
+  $('#koprev').innerHTML='<div class="koprev">'+(warn?'<p class="kowarn" role="alert"><b>'+t(herkunft==='fremd'?'ko.imp.fremd':'ko.imp.unbekannt')+'</b> '+t('ko.imp.fremd.sub')+'</p>':'')+
+    '<table class="tt"><tr><th></th><th>'+t('ko.imp.geraet')+'</th><th>'+t('ko.imp.datei')+'</th></tr>'+row('ko.imp.xp',a.xp,b.xp)+row('ko.imp.faecher',a.mods==null?'–':a.mods,b.mods==null?'–':b.mods)+row('ko.imp.aufgaben',a.tasks,b.tasks)+row('ko.imp.karten',a.cards,b.cards)+row('ko.imp.haken',a.done,b.done)+'</table>'+
+    '<p class="small muted">'+t('ko.imp.hinweis')+'</p>'+(warn?'<label class="small kook"><input type="checkbox" id="koimpok"> '+t('ko.imp.trotzdem')+'</label>':'')+
+    '<div class="btns"><button class="btn sm" data-act="komerge" id="komerge"'+(warn?' disabled':'')+'>'+t('ko.imp.merge')+'</button><button class="btn sm ghost" data-act="koimpno">'+t('ob.abbrechen')+'</button></div></div>'}
+document.addEventListener('change',function(e){if(!e.target)return;if(e.target.id==='koimpok'){var b=$('#komerge');if(b)b.disabled=!e.target.checked;return}if(e.target.id!=='koimp')return;var f=e.target.files&&e.target.files[0];if(!f)return;
+  if(f.size>20*1024*1024){toast(t('ko.imp.gross'));return}
+  var rd=new FileReader();rd.onload=function(){var o;try{o=JSON.parse(rd.result)}catch(err){o=null}
+    if(!o||typeof o!=='object'||Array.isArray(o)||!SECTIONS.some(function(k){return o[k]&&typeof o[k]==='object'&&!Array.isArray(o[k])})){$('#koprev').innerHTML='';toast(t('ko.imp.kaputt'));return}
+    var k=o._konto,c=cleanS(o);kontoId().then(function(me){koPreview(c,!k||!k.u?'unbekannt':(k.u===me.u||k.m===me.m)?'gleich':'fremd')},function(){koPreview(c,'unbekannt')})};rd.readAsText(f)});
+function koAct(a,el){
+  if(a==='konm'){var v=(($('#konm')||{}).value||'').trim().slice(0,30);S.name=v||null;save();rerender();toast(t('ko.gespeichert'));return true}
+  if(a==='kogoal'){S.goal=+el.getAttribute('data-v');save();rerender();return true}
+  if(a==='kozeit'||a==='kostil'){var L=Object.assign({},S.lern||{});if(a==='kozeit'){L.zeit=el.getAttribute('data-v');L.uhr=((D.sprueche||{}).erinnerung||{})[L.zeit]||null}else{L.stil=el.getAttribute('data-v');L.zeit=L.zeit||null}S.lern=L;save();rerender();return true}
+  if(a==='kofehler'){S.ui.fehlerAus=el.getAttribute('data-v')==='aus'?1:0;save();rerender();return true}
+  if(a==='koexport'){koExport();return true}
+  if(a==='kopw'){var f=function(id,lbl,ac){return '<label class="lg-f"><input id="'+id+'" type="password" placeholder=" " autocomplete="'+ac+'"><span>'+lbl+'</span><button type="button" class="lg-eye" data-act="koeye" data-for="'+id+'" aria-label="'+esc(t('ko.pw.zeigen'))+'">'+IC.eye+'</button></label>'};
+    sheet('<div class="kopw"><p class="small muted">'+t('ko.pw.regel')+'</p>'+f('kpw1',t('ko.pw.neu'),'new-password')+f('kpw2',t('ko.pw.nochmal'),'new-password')+'<div class="btns"><button class="btn" data-act="kopwset">'+t('ob.speichern')+'</button><button class="btn ghost" data-act="close">'+t('ob.abbrechen')+'</button></div></div>',{title:t('ko.pw.btn')});setTimeout(function(){var i=$('#kpw1');if(i)i.focus()},50);return true}
+  if(a==='koeye'){var pi=$('#'+el.getAttribute('data-for'));if(pi){pi.type=pi.type==='password'?'text':'password';el.classList.toggle('on',pi.type==='text')}return true}
+  if(a==='kopwset'){var p1=($('#kpw1')||{}).value||'',p2=($('#kpw2')||{}).value||'';
+    if(p1.length<12||!/[a-zäöüß]/.test(p1)||!/[A-ZÄÖÜ]/.test(p1)||!/\d/.test(p1)||!/[^A-Za-zÄÖÜäöüß0-9]/.test(p1)){toast(t('ko.pw.regel'));return true}
+    if(p1!==p2){toast(t('ko.pw.ungleich'));return true}
+    el.disabled=true;setPassword(p1).then(function(){closeAll();toast(t('ko.pw.ok'))}).catch(function(e){el.disabled=false;toast(String(e.message||e))});return true}
+  if(a==='kodel'){koDelSheet();return true}
+  if(a==='kodelgo'){koDelGo();return true}
+  if(a==='koimpno'){KOIMP=null;$('#koprev').innerHTML='';var fi=$('#koimp');if(fi)fi.value='';return true}
+  if(a==='komerge'){if(!KOIMP||el.disabled)return true;var R=KOIMP;KOIMP=null;var M=mergeByTs(S,R._ts?R:Object.assign({},R,{_ts:{}}));applyRemote(M);save();
+    (chosen()?ensureMods(chosen()):Promise.resolve()).then(function(){rerender();toast(t('ko.imp.ok'));if(syncAllowed())syncNow(true)},function(){rerender()});return true}
+  return false}
 
 /* ================= Kopfrechnen ================= */
 function fmtSec(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
@@ -1245,7 +1532,7 @@ document.addEventListener('keydown',function(e){var fig=e.target.closest&&e.targ
 var MELD={png:null,art:'fehler'};
 /* Nur diese Stile kopieren: alle ~400 je Element dauerten auf einer Vorlesungsseite (≈6000 Elemente) 33 s statt 2 s */
 var SNAPSTYLE='display position top right bottom left z-index width height min-width min-height max-width max-height box-sizing margin-top margin-right margin-bottom margin-left padding-top padding-right padding-bottom padding-left flex-direction flex-wrap flex-grow flex-shrink flex-basis align-items align-self align-content justify-content justify-items gap row-gap column-gap grid-template-columns grid-template-rows grid-column-start grid-column-end grid-row-start grid-row-end color background-color background-image background-size background-position background-repeat background-clip -webkit-background-clip -webkit-text-fill-color border-top-width border-right-width border-bottom-width border-left-width border-top-style border-right-style border-bottom-style border-left-style border-top-color border-right-color border-bottom-color border-left-color border-top-left-radius border-top-right-radius border-bottom-left-radius border-bottom-right-radius box-shadow opacity transform transform-origin font-family font-size font-weight font-style font-variant-numeric line-height letter-spacing text-align text-decoration-line text-decoration-color text-transform text-overflow white-space word-break overflow-wrap overflow-x overflow-y visibility vertical-align stroke-dasharray stroke-dashoffset list-style-type object-fit outline-style'.split(' ');
-function meldenBtn(){var b=document.getElementById('meldenbtn'),show=loggedIn()&&!AUTH.recovery;
+function meldenBtn(){var b=document.getElementById('meldenbtn'),show=loggedIn()&&!AUTH.recovery&&!/^#\/(impressum|datenschutz)/.test(location.hash||''); /* Befund 76: keine Momentaufnahme mit Name/Anschrift */
   document.body.classList.toggle('has-melden',show);
   if(!show){if(b)b.remove();return}
   if(!b){b=document.createElement('button');b.id='meldenbtn';b.className='meldenbtn';b.setAttribute('data-act','melden');b.setAttribute('aria-label','Fehler oder Idee melden');
@@ -1278,6 +1565,95 @@ function meldenSend(){var txt=(($('#meldtext')||{}).value||'').trim(),btn=$('#me
    .then(function(){MELD.png=null;closeAll();toast('Danke! Deine Meldung ist angekommen.')},function(e){if(btn){btn.disabled=false;btn.textContent='Senden'}
      toast(/Failed to fetch|NetworkError/.test(String(e.message))?'Kein Internet – bitte später noch einmal.':String(e.message||e))})}
 
+/* ================= Start: Onboarding #/start (Bauprogramm B2, 2 Schritte nach Inhaber-Ja 02.11.) =================
+   Schritt 1 „Was willst du lernen?“ (Studiengang-Paket oder eigene Zusammenstellung mit Suche), Schritt 2 Tagesziel.
+   #/start/edit = Fächer ändern (später auch über die Konto-Seite). Abwählen löscht keinen Lernstand. */
+var OB=null,GATE=0;
+function obInit(edit){var ch=chosen();var L=lern();OB={step:edit?1:0,edit:!!edit,mode:S.paket||!ch?'paket':'eigen',sel:ch?ch.filter(sichtbar):[],goal:S.goal||10,zeit:L.zeit||zeitVon(NOW.getHours()),stil:L.stil,q:''} /* neu: leere Liste; Ändern: bisherige Auswahl */}
+function hasProgress(){if((S.xp||0)>0||S.name)return true; /* nur echte Nutzerspuren – feste Lernpläne legt die App selbst an */
+  if(['done','tasks','cards','diag','quiz','read','sym','nach','mast','eigene','kr','todos','days','haeppchen'].some(function(k){return Object.keys(S[k]||{}).length}))return true;
+  return Object.keys(S.plans||{}).some(function(k){var p=S.plans[k];return p&&p.done&&Object.keys(p.done).length})}
+/* Erst synchronisieren, dann entscheiden: Auswahl vom Server übernehmen, Bestandsnutzer übernehmen oder Onboarding */
+function startGate(){if(GATE)return;GATE=1;
+  var p=(typeof syncAllowed==='function'?syncAllowed():loggedIn())?syncNow(true):Promise.resolve();
+  Promise.resolve(p).catch(function(){}).then(function(){GATE=2;
+    if(chosen()){ensureMods(chosen()).then(rerender,rerender);return}
+    if(hasProgress()){S.lang=S.lang||'de';S.ui.mvHint=1;var pr=setMods(paketMods(PAKET0),PAKET0);
+      /* Befund 66: automatische Übernahme gilt als „älter als alles“ – eine echte Wahl auf einem anderen Gerät gewinnt beim Sync (auch wenn dieses Gerät offline startete) */
+      var ts=S._ts._s=S._ts._s||{};ts.mods=ts.paket=ts.lang=1;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}
+      pr.then(rerender,rerender);return} /* Bestandsnutzer: alles wie bisher */
+    obInit(false);go('#/start')})}
+/* Onboarding B2b/B2c (Inhaber 02.11.: „soll begeistern“): Willkommen → Was willst du lernen? → Wie lernst du? (Zeit, Wann, Stil – je ein Bildschirm) → Dein Plan steht.
+   Eichhörnchen mit Sprechblase als Begleiter (Handy oben, Desktop links; nie über Inhalten), Fortschrittsbalken, Karten mit Tiefe. */
+var OBIC={5:'<path d="M5 19c0-8 6-14 14-14 0 8-6 14-14 14z"/><path d="M5 19 14 10"/>',10:'<path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M16 11h2a2 2 0 0 1 0 4h-2"/><path d="M8 3v3M12 3v3"/>',
+  15:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/>',30:'<path d="M12 3c4 2 6 6 6 10l-3 3H9l-3-3c0-4 2-8 6-10z"/><circle cx="12" cy="10" r="2"/><path d="M9 16l-2 4 3-1M15 16l2 4-3-1"/>'};
+OBIC.morgens='<path d="M3 18h18"/><path d="M6 18a6 6 0 0 1 12 0"/><path d="M12 4v3M4.9 9.9l1.4 1.4M19.1 9.9l-1.4 1.4"/>';
+OBIC.nachmittags='<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+OBIC.abends='<path d="M3 19h18"/><path d="M6 19a6 6 0 0 1 12 0"/><path d="M12 10V3M9 7l3 3 3-3"/>';
+OBIC.spaet='<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/><path d="M17 3v3M15.5 4.5h3"/>';
+OBIC.haeppchen='<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>';
+OBIC.stueck='<path d="M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/><path d="M8 7h8M8 11h8M8 15h5"/>';
+var OBGOALS=[[5,'locker'],[10,'normal'],[15,'ernst'],[30,'intensiv']],OBZEIT=LERN_ZEIT,OBSTIL=LERN_STIL,OBN=5; /* Schritte 0–5: Willkommen, Was lernen, Zeit, Wann, Stil, Plan steht */
+function obSay(st){if(st===3&&OB.zeit){var sp=sprueche(OB.zeit);if(sp.length)return esc(sp[0])}return t('ob.say'+st)}
+function obLernNav(){return '<div class="obx-nav"><button class="btn ghost" data-act="obback">'+IC.back+' '+t('ob.zurueck')+'</button><button class="btn lg-go obx-go" data-act="'+(OB.step===4?'obdone':'obnext')+'">'+t('ob.weiter')+' '+IC.chev+'</button></div>'}
+function obIcon(g){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+OBIC[g]+'</svg>'}
+function obChips(ids){return '<span class="obx-chips">'+ids.filter(sichtbar).map(function(id,i){var k=katMod(id);return '<span class="chip '+cls(id)+'" style="--i:'+i+'">'+esc(k?k.name.de:id)+'</span>'}).join('')+'</span>'}
+function obModList(){var q=(OB.q||'').toLowerCase();return '<div class="obx-list">'+(KAT.mods||[]).filter(function(k){return sichtbar(k.id)}).map(function(k){var on=OB.sel.indexOf(k.id)>=0,hit=!q||((k.name&&k.name.de||'')+' '+(k.suche||[]).join(' ')+' '+k.hochschule).toLowerCase().indexOf(q)>=0;
+    return '<button class="obx-mod obmod '+cls(k.id)+(on?' on':'')+'" data-act="obmod" data-m="'+esc(k.id)+'" role="checkbox" aria-checked="'+on+'"'+(hit?'':' hidden')+'><span class="obx-ck">'+IC.check+'</span><span class="grow"><span class="t">'+esc(k.name&&k.name.de||k.id)+'</span><span class="s">'+esc(k.hochschule||'')+' · '+esc(k.semester||'')+'</span></span></button>'}).join('')+'</div>'}
+function vStart(arg){if(!OB||(arg==='edit')!==OB.edit)obInit(arg==='edit');var pk=(KAT.pakete||[])[0]||{name:{},kurz:{},mods:[]},st=OB.step,ed=OB.edit;
+  var h='<div class="obx m-studium"><div class="obx-bar"'+(st===0||ed?' hidden':'')+'><i style="width:'+(st*100/OBN)+'%"></i></div><div class="obx-grid">'+
+    '<aside class="obx-sq"><div class="obx-bubble" aria-live="polite">'+(ed?t('ob.say.edit'):obSay(st))+'</div><div class="obx-sqimg">'+SQSVG+'</div></aside><section class="obx-main obx-in" key="'+st+'">';
+  if(st===0){
+    h+='<p class="obx-kick">'+t('ob.s0.kick')+'</p><h1>'+t('ob.s0.title')+' <span class="grad">'+t('ob.s0.title2')+'</span></h1><p class="obx-lead">'+t('ob.s0.sub')+'</p>'+
+      '<ul class="obx-feat">'+['ob.s0.f1','ob.s0.f2','ob.s0.f3'].map(function(k,i){return '<li style="--i:'+i+'"><span>'+IC.check+'</span>'+t(k)+'</li>'}).join('')+'</ul>'+
+      '<button class="btn lg-go obx-go" data-act="obnext">'+t('ob.s0.los')+' '+IC.chev+'</button>';
+  }else if(st===1){
+    h+='<h1>'+t(ed?'ob.edit.title':'ob.s1.title')+'</h1><p class="obx-lead">'+t(ed?'ob.edit.sub':'ob.s1.sub')+'</p>';
+    h+='<button class="obx-card obopt'+(OB.mode==='paket'?' on':'')+'" data-act="obmode" data-v="paket" aria-pressed="'+(OB.mode==='paket')+'"><span class="obx-ck">'+IC.check+'</span><span class="obx-tag">'+t('ob.paket.tag')+'</span><b>'+esc(pk.name.de||'')+'</b><span class="s">'+t('ob.paket.sub',{n:pk.mods.length})+'</span>'+obChips(pk.mods)+'</button>';
+    h+='<button class="obx-card obopt'+(OB.mode==='eigen'?' on':'')+'" data-act="obmode" data-v="eigen" aria-pressed="'+(OB.mode==='eigen')+'"><span class="obx-ck">'+IC.check+'</span><b>'+t('ob.eigen.title')+'</b><span class="s">'+t('ob.eigen.sub')+'</span></button>';
+    if(OB.mode==='eigen')h+='<div class="obx-pick"><input id="obq" class="search" type="search" placeholder="'+esc(t('ob.suche'))+'" value="'+esc(OB.q)+'" autocomplete="off" aria-label="'+esc(t('ob.suche'))+'">'+obModList()+'<p class="small muted" id="obcount">'+(OB.sel.length===1?t('ob.gewaehlt1'):t('ob.gewaehlt',{n:OB.sel.length}))+'</p></div>';
+    var okSel=OB.mode==='paket'||OB.sel.length>0;
+    h+='<div class="obx-nav">'+(ed?'<a class="btn ghost" href="#/faecher">'+t('ob.abbrechen')+'</a><button class="btn lg-go obx-go" data-act="obsave"'+(okSel?'':' disabled')+'>'+t('ob.speichern')+'</button>':'<button class="btn ghost" data-act="obback">'+IC.back+' '+t('ob.zurueck')+'</button><button class="btn lg-go obx-go" data-act="obnext"'+(okSel?'':' disabled')+'>'+t('ob.weiter')+' '+IC.chev+'</button>')+'</div>';
+    if(ed)h+='<p class="small muted">'+t('ob.edit.hinweis')+'</p>';
+  }else if(st===2){
+    h+='<p class="obx-kick">'+t('ob.lern.kick',{i:1})+'</p><h1>'+t('ob.s2.title')+'</h1><p class="obx-lead">'+t('ob.s2.sub')+'</p><div class="obx-goals">'+OBGOALS.map(function(g,i){var on=OB.goal===g[0],hn=HCOUNT[g[0]];
+      return '<button class="obx-card obx-goal obgoal'+(on?' on':'')+'" data-act="obgoal" data-v="'+g[0]+'" aria-pressed="'+on+'" style="--i:'+i+'"><span class="obx-ic">'+obIcon(g[0])+'</span><b>'+g[0]+' min</b><span class="obx-gname">'+t('ob.goal.'+g[1])+'</span><span class="s">'+t('ob.goal.'+g[1]+'.nutzen')+'</span><span class="obx-hp">'+(hn===1?t('ob.goal.hp1'):t('ob.goal.hp',{n:hn}))+'</span></button>'}).join('')+'</div>'+obLernNav();
+  }else if(st===3){
+    h+='<p class="obx-kick">'+t('ob.lern.kick',{i:2})+'</p><h1>'+t('ob.s3w.title')+'</h1><p class="obx-lead">'+t('ob.s3w.sub')+'</p><div class="obx-goals">'+OBZEIT.map(function(z,i){var on=OB.zeit===z;
+      return '<button class="obx-card obx-goal obx-txt obzeit'+(on?' on':'')+'" data-act="obzeit" data-v="'+z+'" aria-pressed="'+on+'" style="--i:'+i+'"><span class="obx-ic">'+obIcon(z)+'</span><b>'+t('ob.zeit.'+z)+'</b><span class="s">'+t('ob.zeit.'+z+'.satz')+'</span></button>'}).join('')+'</div>'+obLernNav();
+  }else if(st===4){
+    h+='<p class="obx-kick">'+t('ob.lern.kick',{i:3})+'</p><h1>'+t('ob.s4.title')+'</h1><p class="obx-lead">'+t('ob.s4.sub')+'</p><div class="obx-goals obx-two">'+OBSTIL.map(function(z,i){var on=OB.stil===z;
+      return '<button class="obx-card obx-goal obx-txt obstil'+(on?' on':'')+'" data-act="obstil" data-v="'+z+'" aria-pressed="'+on+'" style="--i:'+i+'"><span class="obx-ic">'+obIcon(z)+'</span><b>'+t('ob.stil.'+z)+'</b><span class="s">'+t('ob.stil.'+z+'.satz')+'</span><span class="obx-hp">'+t('ob.stil.'+z+'.test')+'</span></button>'}).join('')+'</div>'+obLernNav();
+  }else{
+    var ids=OB.mode==='paket'?pk.mods:OB.sel,g=OBGOALS.find(function(x){return x[0]===OB.goal})||OBGOALS[1];
+    h+='<h1>'+t('ob.s3.title')+' <span class="grad">'+t('ob.s3.title2')+'</span></h1><p class="obx-lead">'+t('ob.s3.sub')+'</p>'+
+      '<div class="obx-card obx-sum"><span class="obx-tag">'+(OB.mode==='paket'?esc((pk.kurz||{}).de||''):t('ob.eigen.title'))+'</span><b>'+(ids.length===1?t('ob.s3.fach1'):t('ob.s3.faecher',{n:ids.length}))+'</b>'+obChips(ids)+
+      '<div class="obx-sumgoal"><span class="obx-ic">'+obIcon(OB.stil)+'</span><span><b class="obx-lernsum"><span>'+g[0]+' min</span> · <span>'+t('ob.sum.'+OB.zeit)+'</span> · <span>'+t('ob.sum.'+OB.stil)+'</span></b><span class="s">'+(OB.stil==='stueck'?t('ob.sum.heute.stueck'):HCOUNT[g[0]]===1?t('ob.goal.hp1'):t('ob.goal.hp',{n:HCOUNT[g[0]]}))+'. '+t('ob.sum.erinn',{uhr:((D.sprueche||{}).erinnerung||{})[OB.zeit]||'–'})+'</span></span></div></div>'+
+      '<ul class="obx-feat">'+['ob.s3.f1','ob.s3.f2','ob.s3.f3'].map(function(k,i){return '<li style="--i:'+i+'"><span>'+IC.check+'</span>'+t(k)+'</li>'}).join('')+'</ul>'+
+      '<button class="btn lg-go obx-go" data-act="obgo">'+t('ob.los')+' '+IC.chev+'</button>';
+  }
+  return h+'</section></div></div>'}
+function obFinish(edit){var ids=OB.mode==='paket'?paketMods(PAKET0):OB.sel.slice(),pk=OB.mode==='paket'?PAKET0:null;if(!ids.length)return;
+  (chosen()||[]).forEach(function(id){if(!sichtbar(id)&&ids.indexOf(id)<0)ids.push(id)}); /* versteckte Wahl bleibt erhalten */
+  if(!edit){S.goal=OB.goal;S.lern={zeit:OB.zeit,stil:OB.stil,uhr:((D.sprueche||{}).erinnerung||{})[OB.zeit]||null};S.lang=S.lang||'de';OB.step=OBN;rerender();window.scrollTo(0,0);confetti()}
+  setMods(ids,pk).then(function(){if(edit){OB=null;go('#/faecher');rerender();toast(t('ob.gespeichert'))}},function(e){toast(String(e.message||e))})}
+function obAct(a,t0){
+  if(a==='obmode'){OB.mode=t0.getAttribute('data-v');rerender();return true}
+  if(a==='obmod'){var id=t0.getAttribute('data-m'),i=OB.sel.indexOf(id);if(i>=0)OB.sel.splice(i,1);else OB.sel.push(id);rerender();return true}
+  if(a==='obnext'){OB.step=Math.min(OBN-1,OB.step+1);rerender();window.scrollTo(0,0);return true}
+  if(a==='obback'){OB.step=Math.max(0,OB.step-1);rerender();window.scrollTo(0,0);return true}
+  if(a==='obgoal'){OB.goal=+t0.getAttribute('data-v');rerender();return true}
+  if(a==='obzeit'){OB.zeit=t0.getAttribute('data-v');rerender();return true}
+  if(a==='obstil'){OB.stil=t0.getAttribute('data-v');rerender();return true}
+  if(a==='obdone'){obFinish(false);return true}
+  if(a==='obgo'){OB=null;go('#/heute');return true}
+  if(a==='obsave'){obFinish(true);return true}
+  if(a==='mvok'){S.ui.mvHint=2;save();rerender();return true}
+  return false}
+document.addEventListener('input',function(e){if(!e.target||e.target.id!=='obq'||!OB)return;OB.q=e.target.value;var q=OB.q.toLowerCase();
+  $$('.obmod').forEach(function(b){var k=katMod(b.getAttribute('data-m'))||{};var hit=!q||((k.name&&k.name.de||'')+' '+(k.suche||[]).join(' ')+' '+(k.hochschule||'')).toLowerCase().indexOf(q)>=0;b.hidden=!hit})});
+function mvHintCard(){if(S.ui.mvHint!==1)return '';return '<div class="card" style="margin-top:12px"><b>'+t('mv.title')+'</b><p class="small" style="margin:6px 0 8px">'+t('mv.text')+'</p><div class="btns" style="margin-top:0"><a class="btn sm soft" href="#/start/edit">'+t('mv.waehlen')+'</a><button class="btn sm ghost" data-act="mvok">'+t('mv.ok')+'</button></div></div>'}
+
 /* ================= Klicks ================= */
 document.addEventListener('change',function(e){var t=e.target;if(t&&t.getAttribute&&t.getAttribute('data-act')==='grp'){S.ui.grp=S.ui.grp||{};S.ui.grp[t.getAttribute('data-k')]=t.value;save();rerender()}});
 document.addEventListener('click',function(e){
@@ -1293,7 +1669,6 @@ document.addEventListener('click',function(e){
   if(a==='eigenedel'){var idd=t.getAttribute('data-id');if(S.eigene&&S.eigene[idd]){delete S.eigene[idd];delete S.done[idd];EV=null;save();toast('Gelöscht.');rerender()}return}
   if(a==='setname'){var v=(($('#nm')||{}).value||'').trim().slice(0,30);if(v){S.name=v;save();rerender()}return}
   if(a==='terms'){sheet('<div class="story"><h2>Nutzungsbedingungen</h2><p class="small muted">Stand: 23.10.2026</p><h3 class="sh">1. Angebot</h3><div class="sp">Diese Lern-App ist ein kostenloses, privates Angebot (Betreiber: GitHub-Nutzer swiedzaid-star) für Studierende. Sie ist kein Angebot der RWTH Aachen. Es besteht kein Anspruch auf Verfügbarkeit oder bestimmte Funktionen; die App kann jederzeit geändert oder eingestellt werden.</div><h3 class="sh">2. Keine Gewähr</h3><div class="sp">Inhalte, Termine, Lernpläne und Klausur-Einschätzungen werden sorgfältig erstellt, sind aber ohne Gewähr. Verbindlich sind ausschließlich die Angaben der Hochschule (RWTHonline, Moodle, Lehrstühle). Einschätzungen zu Prüfungen sind Prognosen, keine Zusagen.</div><h3 class="sh">3. Urheberrecht</h3><div class="sp">Texte, Aufgaben, Lösungswege, Grafiken, das Design und das Maskottchen sind urheberrechtlich geschützt. Alle Rechte vorbehalten. Erlaubt ist die Nutzung zum eigenen Lernen. Nicht erlaubt ist ohne schriftliche Zustimmung: Inhalte kopieren, veröffentlichen, weitergeben, verkaufen, automatisiert auslesen (Scraping) oder in andere Apps, Websites oder KI-Trainingsdaten übernehmen.</div><h3 class="sh">4. Haftung</h3><div class="sp">Da die App unentgeltlich ist, haftet der Betreiber nur für Vorsatz und grobe Fahrlässigkeit sowie bei Verletzung von Leben, Körper oder Gesundheit. Für Datenverlust (z. B. durch Löschen der Browserdaten) wird nicht gehaftet; nutze bei Bedarf den Sync oder „Fortschritt kopieren“.</div><h3 class="sh">5. Schlussbestimmungen</h3><div class="sp">Es gilt deutsches Recht. Sollte eine Bestimmung unwirksam sein, bleiben die übrigen wirksam.</div></div>',{title:'Nutzungsbedingungen'});return}
-  if(a==='privacy'){sheet('<div class="story"><h2>Datenschutz und Hinweise</h2><h3 class="sh">Was ist das?</h3><div class="sp">Eine private, nicht kommerzielle Lern-App eines Studierenden für das eigene Studium. <b>Kein offizielles Angebot der RWTH Aachen</b> und nicht mit ihr verbunden. Alle Angaben ohne Gewähr; verbindlich sind immer RWTHonline, Moodle und die Lehrstühle.</div><h3 class="sh">Verantwortlich</h3><div class="sp">GitHub-Nutzer <b>swiedzaid-star</b>. Kontakt über das GitHub-Repository dieser App (github.com/swiedzaid-star/Studium-App-Daumen-Gedr-ckt, „Issues“).</div><h3 class="sh">Welche Daten anfallen</h3><div class="sp"><b>Hosting:</b> Die Seite liegt bei GitHub Pages (GitHub Inc., USA). GitHub verarbeitet beim Aufruf technisch nötige Daten wie die IP-Adresse in Server-Logs. Details: GitHub Privacy Statement (docs.github.com, „GitHub General Privacy Statement“).<br><b>Konto und Fortschritt:</b> Die Anmeldung und dein Lernfortschritt laufen über Supabase (Supabase Inc.; Server in Frankfurt, EU). Gespeichert werden E-Mail-Adresse, Passwort (verschlüsselt als Hash), Anmeldezeitpunkte und dein Fortschritt (erledigte Aufgaben, Karteikarten, Pläne, Einstellungen, Vorname, falls angegeben). Zusätzlich liegt eine Kopie im lokalen Speicher deines Browsers, damit die App offline funktioniert. Es gibt keine Registrierung, kein Tracking, keine Werbung und keine Schriften oder Skripte von fremden Servern.</div><h3 class="sh">Deine Rechte</h3><div class="sp">Auskunft, Berichtigung und Löschung deines Kontos samt Fortschritt jederzeit über den Kontakt oben; lokale Daten löschst du über die Browserdaten dieser Seite. Du hast außerdem die Rechte aus der DSGVO (Auskunft, Löschung, Beschwerde bei einer Datenschutz-Aufsichtsbehörde).</div><h3 class="sh">Inhalte</h3><div class="sp">Zusammenfassungen, Erklärungen und Aufgaben sind eigene Texte und eigene Aufgaben (teils angelehnt an Themen und Aufgabentypen der Lehrveranstaltungen). Es werden keine Vorlesungsfolien, Skripte oder Altklausuren der Lehrstühle wiedergegeben. © 2026 swiedzaid-star, alle Rechte vorbehalten (siehe Nutzungsbedingungen). Schriften: Plus Jakarta Sans und JetBrains Mono (SIL Open Font License), Formeln: MathJax (Apache License 2.0), lokal eingebunden.</div></div>',{title:'Datenschutz'});return}
   if(a==='close'){closeAll();rerender();return}
   if(a==='sessdone'){var pp=S.plans[t.getAttribute('data-x')];if(pp){pp.done[t.getAttribute('data-s')]=true;activity(10);save()}closeAll();toast('Abgehakt. Stark!');rerender();return}
   if(a==='install'){if(INSTALL){INSTALL.prompt();INSTALL.userChoice.then(function(){INSTALL=null;rerender()})}return}
@@ -1318,7 +1693,7 @@ document.addEventListener('click',function(e){
   if(a==='step'){var c=t.closest('.ex'),hid=c.querySelector('.steps li[hidden]');if(hid){hid.hidden=false;ts(hid)}if(!c.querySelector('.steps li[hidden]'))t.remove();return}
   if(a==='stepall'){var c2=t.closest('.ex');$$('.steps li',c2).forEach(function(li){li.hidden=false});$$('.btns',c2).forEach(function(b){b.remove()});return}
   if(a==='prep'){var pm=MOD[t.getAttribute('data-m')],pr=prepFor({mod:pm.id,title:t.getAttribute('data-ex')==='1'?'übung':'vorlesung'});if(!pr)return;runPrep(pm,pr);return}
-  if(a==='ptopic'){var tid=t.getAttribute('data-t'),ts2=tasksOfTopic(tid).slice().sort(function(a,b){var ra=res(a.id),rb=res(b.id);return ((ra==null?.5:ra)-(rb==null?.5:rb))||(a.level-b.level)});runItems(ts2.slice(0,6).map(taskItem),{title:TOPIC[tid].name,mode:'practice'});return}
+  if(a==='ptopic'){var tid=t.getAttribute('data-t'),ts2=tasksOfTopic(tid).slice().sort(function(a,b){var ra=res(a.id),rb=res(b.id);return ((ra==null?.5:ra)-(rb==null?.5:rb))||(a.level-b.level)});runItems(itemsFor(ts2.slice(0,6)),{title:TOPIC[tid].name,mode:'practice'});return}
   if(a==='read'){S.read[t.getAttribute('data-l')]=true;activity(5);save();rerender();return}
   if(a==='practice'){var l=LECT[t.getAttribute('data-l')],tk=[];topicsOfLecture(l).forEach(function(tp){tk=tk.concat(tasksOfTopic(tp.id))});runItems(shuffle(tk).slice(0,8).map(taskItem),{title:l.title,mode:'practice'});return}
   if(a==='quizredo'){var wr=window.__quizRedo||[];if(wr.length)runItems(termQuestions(wr,termsOf(MOD[t.getAttribute('data-m')])),{title:'Fehler nochmal',mode:'quiz',onEnd:function(r){r.forEach(function(x){if(x.item.term)gradeCard(x.item.term,x.r===1)});var ok=r.filter(function(x){return x.r===1}).length;if(ok===r.length)confetti();return '<div class="center"><div class="big">'+ok+' / '+r.length+'</div><p>'+(ok===r.length?'Jetzt sitzen alle!':'Die falschen kommen in den Karten öfter dran.')+'</p><div class="btns" style="justify-content:center"><button class="btn" data-act="close">Fertig</button></div></div>'}});return}
@@ -1327,6 +1702,7 @@ document.addEventListener('click',function(e){
   if(a==='deckkeys'){runDeck(t.getAttribute('data-keys').split('|').map(function(k){return TERM[k]}).filter(Boolean),'Karteikarten');return}
   if(a==='review'){var m3=MOD[t.getAttribute('data-m')];runReview(m3);return}
   if(a==='diag'){startDiag(t.getAttribute('data-x'));return}
+  if(a==='diaghow'){startDiag(t.getAttribute('data-x'),false,t.getAttribute('data-v'));return}
   if(a==='learn'){learnSheet([t.getAttribute('data-t')]);return}
   if(a==='runsess'){runSession(t.getAttribute('data-x'),t.getAttribute('data-s'));return}
   if(a==='sess'){var p=S.plans[t.getAttribute('data-x')],sid=t.getAttribute('data-s');if(p){p.done[sid]=!p.done[sid];if(p.done[sid])activity(10);save();rerender()}return}
@@ -1337,7 +1713,11 @@ document.addEventListener('click',function(e){
   if(a==='pwset'){var cm=(($('#pwmail')||{}).value||'').trim().toLowerCase(),acct=((AUTH.user&&AUTH.user.email)||'').toLowerCase();
     if(!cm){toast('Bitte deine E-Mail zur Bestätigung eintragen.');return}
     if(!acct||cm!==acct){logout();toast('Dieser Link gehört nicht zu deinem Konto.');rerender();return}} /* Befund 6b: fremder Link → Sitzung verwerfen */
-  if(a==='pwset'||a==='pwchange'){var p1=a==='pwset'?($('#pw1').value||''):prompt('Neues Passwort (mind. 12 Zeichen, Groß/Klein, Zahl, Sonderzeichen):'),p2=a==='pwset'?($('#pw2').value||''):p1;if(p1==null)return;if(p1.length<12){toast('Mindestens 12 Zeichen.');return}if(p1!==p2){toast('Die Passwörter stimmen nicht überein.');return}setPassword(p1).then(function(){AUTH.recovery=false;authSave();toast('Passwort gespeichert.');rerender()}).catch(function(e){toast('Fehler: '+e.message)});return}
+  if(a==='pwset'){var p1=$('#pw1').value||'',p2=$('#pw2').value||'';if(p1.length<12){toast('Mindestens 12 Zeichen.');return}if(p1!==p2){toast('Die Passwörter stimmen nicht überein.');return}setPassword(p1).then(function(){AUTH.recovery=false;authSave();toast('Passwort gespeichert.');rerender()}).catch(function(e){toast('Fehler: '+e.message)});return}
+  if(/^ob|^mvok$/.test(a)&&obAct(a,t))return;
+  if(a==='pwchange'){koAct('kopw',t);return} /* Befund 72: Formular statt prompt() */
+  if(/^ko/.test(a)&&koAct(a,t))return;
+  if(/^sp/.test(a)&&spAct(a,t))return;
   if(a==='melden'){meldenStart();return}
   if(a==='meldart'){MELD.art=t.getAttribute('data-a');$$('[data-act=meldart]',layer).forEach(function(x){var on=x===t;x.classList.toggle('on',on);x.setAttribute('aria-checked',on)});return}
   if(a==='meldsend'){meldenSend();return}
@@ -1355,12 +1735,23 @@ document.addEventListener('click',function(e){
   if(a==='fquiz'){formulaQuiz(t.getAttribute('data-m'));return}
   if(a==='focus'){focusTimer();return}
   if(a==='h'){var hs=haeppchen(),x=hs[+t.getAttribute('data-i')];if(!x)return;
-    if(x.act==='session')runSession(x.exam,x.sid);else if(x.act==='diag')startDiag(x.exam);else if(x.act==='review'){runReview(MOD[x.mod],x.key)}else if(x.act==='cards'){runDeck(dueCards(),'Fällige Karteikarten',function(){hMark(x.key)})}return}
+    if(x.act==='session')runSession(x.exam,x.sid);else if(x.act==='diag')startDiag(x.exam);else if(x.act==='review'){runReview(MOD[x.mod],x.key)}else if(x.act==='cards'){runDeck(dueCards(),'Fällige Karteikarten',function(){hMark(x.key)})}else if(x.act==='topic')runTopic(x.tid,x.key);else if(/^sp/.test(x.act))spHRun(x);return}
   if(a==='theme'){var th=t.getAttribute('data-t');S.theme=th==='auto'?null:th;if(S.theme)document.documentElement.setAttribute('data-theme',th);else document.documentElement.removeAttribute('data-theme');save();rerender();return}
   if(a==='export'){var txt=JSON.stringify(S);try{navigator.clipboard.writeText(txt).then(function(){toast('Kopiert! Auf dem anderen Gerät einfügen.')},function(){fallback()})}catch(err){fallback()}function fallback(){var ta=$('#imp');ta.value=txt;ta.select();toast('Text markiert: jetzt kopieren.')}return}
   if(a==='import'){try{var o=JSON.parse($('#imp').value);if(!o||typeof o!=='object')throw 0;S=o;SECTIONS.forEach(function(k){S[k]=S[k]||{}});S.xp=S.xp||0;save();rerender();toast('Fortschritt übernommen.')}catch(err){toast('Das hat nicht geklappt. Bitte den ganzen kopierten Text einfügen.')}return}
 });
 function runReview(m,hkey){var it=pickFresh(reviewItems(m).map(taskItem),12,4);runItems(it,{title:'Wiederholung '+SHORT[m.id],mode:'practice',onEnd:function(r){hMark(hkey||'rev:'+m.id);activity(20);var okN=r.filter(function(o){return o.r===1}).length;if(okN>=r.length*.8)confetti();return '<div class="center"><div class="big">'+okN+' / '+r.length+'</div><p>Wiederholung geschafft! +20 XP</p><div class="btns" style="justify-content:center"><button class="btn" data-act="close">Fertig</button></div></div>'}})}
+/* Themen-Einheit (B2c): Lesen → Karten → Aufgaben. Häppchen: wenige Karten + eine Aufgabe; am Stück: alle Karten + Aufgaben leicht → prüfungsschwer */
+function runTopic(tid,key,learned){var tp=TOPIC[tid];if(!tp||!MOD[tp.mod])return;var stk=lern().stil==='stueck';
+  if(!learned&&hasLearn(tid)){learnSheet([tid],{title:tp.name,then:function(){runTopic(tid,key,true)}});return}
+  var deck=termsOfTopic(tid).slice(0,stk?10:4);
+  function tasks(){var cand=shuffle(tasksOfTopic(tid)).sort(function(a,b){return (a.level||1)-(b.level||1)}).map(taskItem);
+    var items=stk?pickFresh(cand,Math.max(8,(S.goal||10)-4),4):pickFresh(cand,4,1).slice(0,1);if(!items.length&&cand.length)items=cand.slice(0,stk?5:1);
+    items.sort(function(a,b){return (a.level||1)-(b.level||1)});
+    runItems(items,{title:tp.name,mode:'practice',keepOrder:true,onEnd:function(r){hMark(key);activity(stk?20:10);var okN=r.filter(function(o){return o.r===1}).length;if(okN===r.length)confetti();
+      return '<div class="center"><div class="big">'+okN+' / '+r.length+'</div><p>'+t(stk?'thema.fertig.stueck':'thema.fertig')+'</p><div class="btns" style="justify-content:center"><button class="btn" data-act="close">Fertig</button></div></div>'}})}
+  if(deck.length){runDeck(deck,tp.name+' · Karten',function(){tasks();return true});return}
+  tasks()}
 function findTerm(m,txt){txt=String(txt||'').trim().toLowerCase();var list=m&&MOD[m]?termsOf(MOD[m]):Object.keys(TERM).map(function(k){return TERM[k]});
   var f=list.find(function(t){return stripHtml(t.t).toLowerCase()===txt})||list.find(function(t){var a=stripHtml(t.t).toLowerCase();return a.indexOf(txt)===0||txt.indexOf(a)===0});return f?f.key:null}
 
@@ -1379,8 +1770,8 @@ if('serviceWorker' in navigator&&location.protocol!=='file:'){window.addEventLis
 /* ================= Sync Handy ↔ Laptop (privates GitHub-Gist) ================= */
 /* ================= Konto und Sync (Supabase, EU Frankfurt) ================= */
 var SB_URL='https://qmbkrqsindnyvqjamsvr.supabase.co',SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFtYmtycXNpbmRueXZxamFtc3ZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI5MjkyNTcsImV4cCI6MjEwODUwNTI1N30.FkQVta2pJioXt4bjdKwhNl06FVQVAgS8Bls5JRfwVJU';
-function authSave(){try{localStorage.setItem(AUTHKEY,JSON.stringify(AUTH))}catch(e){}}
-function sySave(){try{localStorage.setItem(SYNCKEY,JSON.stringify(SY))}catch(e){}}
+function authSave(){if(GONE)return;try{localStorage.setItem(AUTHKEY,JSON.stringify(AUTH))}catch(e){}}
+function sySave(){if(GONE)return;try{localStorage.setItem(SYNCKEY,JSON.stringify(SY))}catch(e){}}
 function loggedIn(){return !!(AUTH.access_token&&AUTH.user)}
 /* Befund 38: Solange ein Passwort-/Einladungslink offen ist (AUTH.recovery), nie synchronisieren – sonst landet der lokale Stand in einem fremden Konto. */
 function syncAllowed(){return loggedIn()&&!AUTH.recovery}
@@ -1426,10 +1817,14 @@ function tsOf(T,sec,k){return (T&&T[sec]&&T[sec][k])||0}
 function mergeByTs(L,R){var out={},LT=L._ts||{},RT=R._ts||{},TS={};
   SECTIONS.forEach(function(sec){var a=L[sec]||{},b=R[sec]||{},o={},t={};Object.keys(a).concat(Object.keys(b)).forEach(function(k){if(k in o)return;var ta=tsOf(LT,sec,k),tb=tsOf(RT,sec,k);var useB=tb>ta||(tb===ta&&!(k in a)&&ta===0);if(useB){if((k in b)&&b[k]!==undefined)o[k]=b[k]}else if((k in a)&&a[k]!==undefined)o[k]=a[k];t[k]=Math.max(ta,tb)});out[sec]=o;TS[sec]=t});
   var sa=LT._s||{},sb=RT._s||{},st={};SCALARS.forEach(function(k){var ta=sa[k]||0,tb=sb[k]||0;out[k]=tb>ta||(tb===ta&&(k in R)&&!(k in L))?R[k]:L[k];st[k]=Math.max(ta,tb)});
+  OBJS.forEach(function(k){var a=L[k],b=R[k];if(!(a&&typeof a==='object')&&!(b&&typeof b==='object'))return;a=a&&typeof a==='object'?a:{};b=b&&typeof b==='object'?b:{};var o={};
+    Object.keys(a).concat(Object.keys(b)).forEach(function(sub){if(sub in o)return;var kk=k+'.'+sub,ta=sa[kk]||sa[k]||0,tb=sb[kk]||sb[k]||0,v=(tb>ta||(tb===ta&&!(sub in a)))&&(sub in b)?b[sub]:(sub in a?a[sub]:b[sub]);if(v!==undefined)o[sub]=v;st[kk]=Math.max(ta,tb)});out[k]=o});
   out.xp=Math.max(L.xp||0,R.xp||0); /* XP gehen nie verloren: der höhere Stand gewinnt, egal welcher Stempel */ TS._s=st;
   out._ts=TS;out._v=2;out._mod=Math.max(L._mod||0,R._mod||0);return out}
-function applyRemote(R){S=R;SECTIONS.forEach(function(k){S[k]=S[k]||{}});S.xp=S.xp||0;S._ts=S._ts||{};snapInit();
-  try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(S.theme)document.documentElement.setAttribute('data-theme',S.theme);if(layer.hidden)rerender()}
+function applyRemote(R){if(GONE)return;R=cleanS(R);if(!R)return;var mods0=JSON.stringify(S.mods);S=R;SECTIONS.forEach(function(k){S[k]=S[k]||{}});S.xp=S.xp||0;S._ts=S._ts||{};snapInit();
+  try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(S.theme)document.documentElement.setAttribute('data-theme',S.theme);
+  if(JSON.stringify(S.mods)!==mods0&&chosen()){ensureMods(chosen()).then(function(){if(layer.hidden)rerender()},function(){});return} /* Fächer-Wahl kam von einem anderen Gerät: Dateien nachladen, Index neu */
+  if(layer.hidden)rerender()}
 var syBusy=false,syTimer=null;
 function syncNow(quiet){if(!syncAllowed()||syBusy||!navigator.onLine)return Promise.resolve();syBusy=true;var uid=AUTH.user&&AUTH.user.id;
   return authReady().then(roleFetch).then(function(){return sbAuthed('/rest/v1/progress?select=data,updated_at&user_id=eq.'+uid)}).then(function(rows){
@@ -1455,7 +1850,7 @@ function testerCard(){if(SY.role!=='tester'||S.ui.testerOk)return '';
 function syLater(){if(!syncAllowed())return;clearTimeout(syTimer);syTimer=setTimeout(function(){syncNow(true)},4000)}
 function syStatus(){if(!loggedIn())return 'Nicht angemeldet';if(SY.err)return '<span class="badc">Problem: '+esc(SY.err)+'</span>';if(!SY.last)return 'Angemeldet, noch nicht synchronisiert';var d=new Date(SY.last);return '<span class="okc">Synchron</span> · zuletzt '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' Uhr'}
 function syncCard(){var u=AUTH.user||{};return '<div class="card"><b>Konto und Geräte-Sync</b><p class="small" style="margin:6px 0">Angemeldet als <b class="nosnap">'+esc(u.email||'')+'</b></p><p class="small" id="systat" style="margin:6px 0">'+syStatus()+'</p><p class="small muted">Fortschritt, Pläne und Einstellungen gleichen sich automatisch ab: beim Öffnen, alle 2 Minuten und kurz nach jeder Änderung. Ohne Internet läuft alles weiter und wird später nachgetragen.</p><div class="btns"><button class="btn sm" data-act="syncnow">Jetzt synchronisieren</button><button class="btn sm ghost" data-act="pwchange">Passwort ändern</button><button class="btn sm ghost" data-act="logout">Abmelden</button></div></div>'}
-function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;D.mods.forEach(function(m){nT+=(m.tasks||[]).length;nF+=(m.formulas||[]).length});var nM=D.mods.filter(function(m){return m.id!=='spa'&&m.id!=='studium'}).length;
+function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;D.mods.forEach(function(m){var c=m._counts||{};nT+=c.tasks||(m.tasks||[]).length;nF+=c.formulas||(m.formulas||[]).length});var nM=D.mods.filter(function(m){return m.id!=='spa'&&m.id!=='studium'}).length;
   return '<div class="lg"><div class="lg-sky" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="lg-in">'+
   '<section class="lg-hero"><div class="lg-mark">'+SQSVG+'</div><p class="lg-kick">WiIng Bau · RWTH Aachen · WS 26/27</p><h1>Dein Semester.<br><span>Ein Plan.</span></h1>'+
   '<p class="lg-sub">Vorlesungen als Lerntexte, eigene Aufgaben mit Lösungsweg, Fristen und Lernpläne – auf jedem Gerät derselbe Stand.</p>'+
@@ -1471,9 +1866,9 @@ function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;D.mods.forEa
      '<label class="lg-f"><input id="lmail" type="email" placeholder=" " autocomplete="username" inputmode="email" spellcheck="false"><span>E-Mail</span></label>'+
      '<label class="lg-f"><input id="lpw" type="password" placeholder=" " autocomplete="current-password"><span>Passwort</span><button type="button" class="lg-eye" data-act="eye" aria-label="Passwort anzeigen">'+IC.eye+'</button></label>'+
      '<p class="lg-caps" id="lcaps">Feststelltaste ist aktiv.</p><button class="btn lg-go" data-act="login">Anmelden '+IC.chev+'</button><button class="lg-link" data-act="forgot">Passwort vergessen?</button>')+
-  '<p class="small badc" id="lerr" role="alert"></p><p class="lg-foot">Privat. Keine Registrierung. Daten in der EU. <button class="lg-link" data-act="privacy">Datenschutz</button></p></section></div></div>'}
+  '<p class="small badc" id="lerr" role="alert"></p><p class="lg-foot">Privat. Keine Registrierung. Daten in der EU. <a class="lg-link" href="#/datenschutz">'+t('ko.datenschutz')+'</a> · <a class="lg-link" href="#/impressum">'+t('recht.impressum')+'</a><br>'+t('recht.hilfe')+' '+supportMail()+'</p></section></div></div>'}
 document.addEventListener('keyup',function(e){var c=document.getElementById('lcaps');if(c&&e.getModifierState&&document.activeElement&&document.activeElement.id==='lpw')c.classList.toggle('on',e.getModifierState('CapsLock'))});
 setTimeout(function(){syncNow(true)},1500);setInterval(function(){if(!document.hidden)syncNow(true)},120000);
 document.addEventListener('visibilitychange',function(){syncNow(true)});window.addEventListener('online',function(){syncNow(true)});
-window.__dbg={S:function(){return S},termQuestions:termQuestions,TERM:function(){return TERM},MOD:MOD,formulaItems:formulaItems,runItems:runItems,dynItems:dynItems,dynEval:dynEval,symGaps:symGaps,symKeys:symKeys,D:D,weeklyOn:weeklyOn,pd:pd};
+window.__dbg={S:function(){return S},mergeByTs:mergeByTs,spItems:spItems,termQuestions:termQuestions,TERM:function(){return TERM},MOD:MOD,formulaItems:formulaItems,runItems:runItems,dynItems:dynItems,dynEval:dynEval,symGaps:symGaps,symKeys:symKeys,D:D,weeklyOn:weeklyOn,pd:pd};
 })();
