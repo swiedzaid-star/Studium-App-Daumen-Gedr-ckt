@@ -22,6 +22,10 @@ try{reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches}c
 
 /* ---------- Speicher ---------- */
 (function(){try{['studium-v1','device','studium-sync','handoff-seen'].forEach(function(k){var o=String.fromCharCode(122,97,105,100,45)+k;if(localStorage.getItem(k)===null&&localStorage.getItem(o)!==null){localStorage.setItem(k,localStorage.getItem(o))}})}catch(e){}})();
+/* Passwortregel (Inhaber 05.11.): mindestens PW_MIN Zeichen mit Groß- und Kleinbuchstaben, Zahl und Sonderzeichen. EINE Stelle;
+   in Supabase (Authentication → Passwortregel) stellt der Inhaber denselben Wert ein. */
+var PW_MIN=8;
+function pwOk(p){p=String(p||'');return p.length>=PW_MIN&&/[a-zäöüß]/.test(p)&&/[A-ZÄÖÜ]/.test(p)&&/\d/.test(p)&&/[^A-Za-zÄÖÜäöüß0-9]/.test(p)}
 var KEY='studium-v1', S;
 var DEVID=(function(){try{var d=localStorage.getItem('device');if(!d){d=Math.random().toString(36).slice(2,10);localStorage.setItem('device',d)}return d}catch(e){return 'x'}})(),DEVNAME=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)?'Handy':'Laptop';
 var SYNCKEY='studium-sync',SY;try{SY=JSON.parse(localStorage.getItem(SYNCKEY))||{}}catch(e){SY={}}
@@ -354,6 +358,11 @@ function spHRun(x){var l=LECT[x.lec];if(!l)return;var fin=function(xp){return fu
   else if(x.act==='spu')spRunEx(l,x.n,fin(10));
   else spRunVoc(l,SPVOC[S.goal||10]||10,'de',function(){setTimeout(function(){spRunEx(l,SPEX[S.goal||10]||5,fin(20))},0);return '<div class="center"><p>'+t('sp.h.weiter')+'</p></div>'})}
 function topicH(tid,stk){var tp=TOPIC[tid];return {key:'topic:'+tid,mod:tp.mod,title:t(stk?'heute.stueck.titel':'heute.thema.titel',{t:tp.name}),min:stk?(S.goal||10):8,act:'topic',tid:tid}}
+/* Befund 84 (Chef 04.11.): Häppchen nach Zeit – so viele, bis das Tagesziel erreicht ist (mindestens 1, höchstens hCount());
+   eine Lernplan-Einheit, die deutlich länger ist als das Ziel, kommt in zwei Teilen (Teil 1 heute, Teil 2 danach). */
+function teilH(x){if(x.act!=='session'||!S.goal||x.min<=S.goal*1.25)return x;var td=S.ui.teil&&S.ui.teil[x.key],tl=td&&td!==ymd(TODAY)?2:1; /* Teil 1 heute erledigt → bleibt heute abgehakt stehen, Teil 2 ab morgen */
+  return Object.assign({},x,{key:x.key+':t'+tl,title:x.title+' · '+t('heute.teil',{i:tl}),min:Math.ceil(x.min/2),teil:tl})}
+function nachZeit(out,n){if(!S.goal)return out.slice(0,n);var res=[],sum=0;out.forEach(function(x){if(res.length<n&&(!res.length||sum<S.goal)){res.push(x);sum+=x.min||0}});return res}
 function haeppchen(){
   var out=[],used={},n=hCount(),stk=lern().stil==='stueck';
   // 1. Lernplan-Einheit von heute (oder verpasste)
@@ -362,7 +371,8 @@ function haeppchen(){
   if(out.length<1){var best=null;MODS.forEach(function(m){m.exams.forEach(function(x){if(x.date&&pd(x.date)>=TODAY&&dd(TODAY,pd(x.date))<=21&&!S.diag[x.id]&&diagCount(m,x)&&(!best||!!diagHalf(x.id)>!!diagHalf(best.x.id)||!!diagHalf(x.id)===!!diagHalf(best.x.id)&&pd(x.date)<pd(best.x.date)))best={m:m,x:x}})});
     if(best){var hf=diagHalf(best.x.id),dn=diagCount(best.m,best.x);out.push({key:'diag:'+best.x.id,mod:best.m.id,title:(hf?t('diag.h.titel2',{x:best.x.name}):'Einstufungstest '+best.x.name)+' ('+SHORT[best.m.id]+')',min:Math.max(5,Math.round((hf?hf.ids.length-hf.n:dn)*1.3)),act:'diag',exam:best.x.id})}}
   // Lernstil „am Stück“: genau eine zusammenhängende Einheit – Lernplan/Einstufung, sonst ein ganzes Thema (Lesen → Karten → Aufgaben leicht → schwer)
-  if(stk){if(out.length){if(out[0].act==='session')out[0].min=Math.max(out[0].min,S.goal||10);return out.slice(0,1)}
+  out=out.map(teilH);
+  if(stk){if(out.length)return out.slice(0,1);
     var tp0=dayTopics()[0];if(tp0)return [topicH(tp0,true)];var sp0=spH(true)[0];if(sp0)return [sp0]}
   // 2b. Sprachkurs: nächste Lektion (Wörter, Übungen)
   spH(false).forEach(function(x){out.push(x)});
@@ -375,7 +385,7 @@ function haeppchen(){
   if(out.length<Math.min(n,3)){MODS.forEach(function(m){if(out.length<Math.min(n,3)&&!out.some(function(o){return o.mod===m.id})&&reviewItems(m).length)out.push({key:'rev:'+m.id,mod:m.id,title:'Wiederholung '+SHORT[m.id],min:12,act:'review'})})}
   // 6. Mehr Zeit (15/30 min): Themen-Häppchen Lesen → Karten → eine Aufgabe
   if(out.length<n)dayTopics().forEach(function(tid){if(out.length<n)out.push(topicH(tid,false))});
-  return out.slice(0,n);
+  return nachZeit(out,n);
 }
 function hDone(k){return S.haeppchen[ymd(TODAY)]&&S.haeppchen[ymd(TODAY)][k]}
 function hMark(k){var d=ymd(TODAY);S.haeppchen[d]=S.haeppchen[d]||{};if(!S.haeppchen[d][k]){S.haeppchen[d][k]=1;save();var hs=haeppchen();if(hs.length&&hs.every(function(h){return hDone(h.key)})){confetti();toast('Alle Häppchen geschafft! +50 XP');activity(50)}}}
@@ -1066,16 +1076,17 @@ function learnSheet(tids,opts){opts=opts||{};var ts=tids.filter(hasLearn);if(!ts
   sheet(h,{title:opts.title||'Lerntext'});ts.forEach(function(tid){S.read['t:'+tid]=Date.now()});save();
   LEARN_THEN=opts.then||null}
 var LEARN_THEN=null;
-function runSession(xid,sid){var m,x;MODS.forEach(function(mm){mm.exams.forEach(function(xx){if(xx.id===xid){m=mm;x=xx}})});var p=S.plans[xid];if(!p)return;var s=p.sessions.find(function(z){return z.id===sid});if(!s)return;
+function runSession(xid,sid,learned,teil){var m,x;MODS.forEach(function(mm){mm.exams.forEach(function(xx){if(xx.id===xid){m=mm;x=xx}})});var p=S.plans[xid];if(!p)return;var s=p.sessions.find(function(z){return z.id===sid});if(!s)return;
   if(s.final&&diagCount(m,x)){startDiag(xid,true);return}
   if(!s.topics.length){sheet('<div class="'+cls(m.id)+' story"><div class="eyebrow">'+esc(x.name)+' · Lernplan</div><h2>'+esc(s.title||'Aufgabe')+'</h2><div class="sp">'+(s.note||'')+'</div><div class="btns" style="margin-top:16px"><button class="btn block" data-act="sessdone" data-x="'+xid+'" data-s="'+sid+'">✓ Erledigt</button></div></div>',{title:s.title||'Lernplan'});return}
-  if(!arguments[2]&&s.topics.some(hasLearn)){learnSheet(s.topics,{title:'Lernplan: '+s.topics.map(function(t){return TOPIC[t].name}).join(' + '),then:function(){runSession(xid,sid,true)}});return}
+  if(!learned&&teil!==2&&s.topics.some(hasLearn)){learnSheet(s.topics,{title:'Lernplan: '+s.topics.map(function(t){return TOPIC[t].name}).join(' + '),then:function(){runSession(xid,sid,true,teil)}});return}
   var cand=[];s.topics.forEach(function(tid){shuffle(tasksOfTopic(tid)).sort(function(a,b){return (a.level||1)-(b.level||1)}).forEach(function(t){itemsFor([t]).forEach(function(it){cand.push(it)})})});
   var items=pickFresh(cand,9,3);if(!items.length&&cand.length)items=cand.slice(0,5);
   items=items.slice().sort(function(a,b){return (a.level||1)-(b.level||1)}); /* leicht beginnend, am Ende mittel bis prüfungsschwer */
+  var hk='plan:'+xid+':'+sid;if(teil){var hz=Math.ceil(items.length/2);items=teil===1?items.slice(0,hz):(items.slice(hz).length?items.slice(hz):items);hk+=':t'+teil} /* Befund 84: lange Einheit in zwei Teilen */
   var deck=[];s.topics.forEach(function(tid){termsOf(m).forEach(function(t){if(t.topic===tid)deck.push(t)})});
-  runItems(items,{title:s.topics.map(function(t){return TOPIC[t].name}).join(' + '),mode:'practice',keepOrder:true,onEnd:function(r){p.done[sid]=true;save();activity(20);hMark('plan:'+xid+':'+sid);confetti();
-    var okN=r.filter(function(o){return o.r===1}).length;return '<div class="center"><div class="big">'+okN+' / '+r.length+'</div><p>Einheit geschafft! +20 XP</p><div class="btns" style="justify-content:center"><button class="btn" data-act="close">Fertig</button></div>'+(deck.length?'<p class="small"><a href="#" data-act="deckkeys" data-keys="'+esc(deck.slice(0,10).map(function(t){return t.key}).join('|'))+'">Noch '+Math.min(deck.length,10)+' Karteikarten dazu</a></p>':'')+'</div>'}});
+  runItems(items,{title:s.topics.map(function(t){return TOPIC[t].name}).join(' + '),mode:'practice',keepOrder:true,onEnd:function(r){if(teil===1){S.ui.teil=S.ui.teil||{};S.ui.teil['plan:'+xid+':'+sid]=ymd(TODAY)}else{p.done[sid]=true;if(S.ui.teil)delete S.ui.teil['plan:'+xid+':'+sid]}save();activity(teil?10:20);hMark(hk);confetti();
+    var okN=r.filter(function(o){return o.r===1}).length;return '<div class="center"><div class="big">'+okN+' / '+r.length+'</div><p>'+(teil===1?t('heute.teil1.fertig'):'Einheit geschafft! '+(teil?'+10':'+20')+' XP')+'</p><div class="btns" style="justify-content:center"><button class="btn" data-act="close">Fertig</button></div>'+(deck.length?'<p class="small"><a href="#" data-act="deckkeys" data-keys="'+esc(deck.slice(0,10).map(function(t){return t.key}).join('|'))+'">Noch '+Math.min(deck.length,10)+' Karteikarten dazu</a></p>':'')+'</div>'}});
 }
 
 /* ---------- Info ---------- */
@@ -1217,6 +1228,20 @@ function koDelGo(){var w=(($('#kodelw')||{}).value||'').trim(),btn=$('#kodelgo')
 /* Befund 71: Export trägt eine Kontokennung (nur SHA-256-Prüfsummen von Konto-ID und E-Mail, kein Klartext) */
 function sha16(x){try{return crypto.subtle.digest('SHA-256',new TextEncoder().encode('studium:'+x)).then(function(b){return Array.prototype.map.call(new Uint8Array(b).slice(0,8),function(n){return ('0'+n.toString(16)).slice(-2)}).join('')})}catch(e){return Promise.resolve('')}}
 function kontoId(){var u=AUTH.user||{};return Promise.all([sha16(u.id||''),sha16(String(u.email||'').toLowerCase())]).then(function(h){return {u:h[0],m:h[1]}})}
+/* Passwort ändern (Tester-Meldung 05.11.): Regeln sichtbar beim Tippen, Fehler bleiben unter den Feldern stehen (Toast verschwand
+   auf dem Handy unter der Tastatur), Antworten des Servers verständlich */
+function pwChecks(p1,p2){var r=[[p1.length>=PW_MIN,t('ko.pw.c.laenge',{n:PW_MIN})],[/[A-ZÄÖÜ]/.test(p1)&&/[a-zäöüß]/.test(p1),t('ko.pw.c.gross')],[/\d/.test(p1),t('ko.pw.c.zahl')],[/[^A-Za-zÄÖÜäöüß0-9]/.test(p1),t('ko.pw.c.sonder')],[!!p2&&p1===p2,t('ko.pw.c.gleich')]];
+  return r.map(function(x){return '<li class="'+(x[0]?'ok':'')+'"><span aria-hidden="true">'+(x[0]?'✓':'○')+'</span> '+x[1]+'<span class="vh">'+(x[0]?' – erfüllt':' – fehlt noch')+'</span></li>'}).join('')}
+function pwFehler(e){var m=String(e&&e.message||e),st=e&&e.status;
+  if(/Failed to fetch|NetworkError/i.test(m))return t('ko.pw.f.netz');
+  if(/weak|at least|characters|should contain|password.*(short|length)/i.test(m))return t('ko.pw.f.schwach',{n:PW_MIN});
+  if(/different|same_password|same password/i.test(m))return t('ko.pw.f.gleich');
+  if(/reauthenticat|nonce/i.test(m))return t('ko.pw.f.reauth');
+  if(st===401||/JWT|session|expired|not logged|refresh|nicht angemeldet/i.test(m))return t('ko.pw.f.sitzung');
+  if(st===429||/rate|limit/i.test(m))return t('ko.pw.f.limit');
+  return t('ko.pw.f.allg',{m:m.slice(0,160)})}
+document.addEventListener('input',function(e){if(!e.target||(e.target.id!=='kpw1'&&e.target.id!=='kpw2'))return;var c=$('#kpwchk');if(c)c.innerHTML=pwChecks(($('#kpw1')||{}).value||'',($('#kpw2')||{}).value||'');var er=$('#kpwerr');if(er)er.textContent=''});
+document.addEventListener('submit',function(e){if(!e.target||e.target.id!=='kpwf')return;e.preventDefault();var b=$('#kpwgo');if(b&&!b.disabled)koAct('kopwset',b)}); /* Enter/„Fertig“ auf der Tastatur speichert */
 function koExport(){var n='studium-fortschritt-'+ymd(new Date())+'.json';
   kontoId().then(function(k){var o=JSON.parse(JSON.stringify(S));o._konto=k;var txt=JSON.stringify(o,null,1);
     var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'}));a.download=n;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1000);toast(t('ko.export.ok',{n:n}))})
@@ -1239,13 +1264,20 @@ function koAct(a,el){
   if(a==='kozeit'||a==='kostil'){var L=Object.assign({},S.lern||{});if(a==='kozeit'){L.zeit=el.getAttribute('data-v');L.uhr=((D.sprueche||{}).erinnerung||{})[L.zeit]||null}else{L.stil=el.getAttribute('data-v');L.zeit=L.zeit||null}S.lern=L;save();rerender();return true}
   if(a==='kofehler'){S.ui.fehlerAus=el.getAttribute('data-v')==='aus'?1:0;save();rerender();return true}
   if(a==='koexport'){koExport();return true}
-  if(a==='kopw'){var f=function(id,lbl,ac){return '<label class="lg-f"><input id="'+id+'" type="password" placeholder=" " autocomplete="'+ac+'"><span>'+lbl+'</span><button type="button" class="lg-eye" data-act="koeye" data-for="'+id+'" aria-label="'+esc(t('ko.pw.zeigen'))+'">'+IC.eye+'</button></label>'};
-    sheet('<div class="kopw"><p class="small muted">'+t('ko.pw.regel')+'</p>'+f('kpw1',t('ko.pw.neu'),'new-password')+f('kpw2',t('ko.pw.nochmal'),'new-password')+'<div class="btns"><button class="btn" data-act="kopwset">'+t('ob.speichern')+'</button><button class="btn ghost" data-act="close">'+t('ob.abbrechen')+'</button></div></div>',{title:t('ko.pw.btn')});setTimeout(function(){var i=$('#kpw1');if(i)i.focus()},50);return true}
-  if(a==='koeye'){var pi=$('#'+el.getAttribute('data-for'));if(pi){pi.type=pi.type==='password'?'text':'password';el.classList.toggle('on',pi.type==='text')}return true}
-  if(a==='kopwset'){var p1=($('#kpw1')||{}).value||'',p2=($('#kpw2')||{}).value||'';
-    if(p1.length<12||!/[a-zäöüß]/.test(p1)||!/[A-ZÄÖÜ]/.test(p1)||!/\d/.test(p1)||!/[^A-Za-zÄÖÜäöüß0-9]/.test(p1)){toast(t('ko.pw.regel'));return true}
-    if(p1!==p2){toast(t('ko.pw.ungleich'));return true}
-    el.disabled=true;setPassword(p1).then(function(){closeAll();toast(t('ko.pw.ok'))}).catch(function(e){el.disabled=false;toast(String(e.message||e))});return true}
+  if(a==='kopw'){var f=function(id,lbl){return '<label class="lg-f"><input id="'+id+'" name="'+id+'" type="password" placeholder=" " autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done"><span>'+lbl+'</span><button type="button" class="lg-eye" data-act="koeye" data-for="'+id+'" aria-label="'+esc(t('ko.pw.zeigen'))+'" aria-pressed="false">'+IC.eye+'</button></label>'};
+    sheet('<form class="kopw" id="kpwf" novalidate>'+
+      '<input class="vh" type="email" name="username" autocomplete="username" value="'+esc((AUTH.user&&AUTH.user.email)||'')+'" tabindex="-1" aria-hidden="true" readonly>'+ /* für Passwort-Manager (Android-Autofill): zu welchem Konto */
+      f('kpw1',t('ko.pw.neu'))+f('kpw2',t('ko.pw.nochmal'))+'<ul class="pwchk" id="kpwchk" aria-live="polite">'+pwChecks('','')+'</ul>'+
+      '<p class="pwerr" id="kpwerr" role="alert" aria-live="assertive"></p>'+
+      '<div class="btns"><button class="btn" type="submit" id="kpwgo">'+t('ob.speichern')+'</button><button class="btn ghost" type="button" data-act="close">'+t('ob.abbrechen')+'</button></div></form>',{title:t('ko.pw.btn')});
+    setTimeout(function(){var i=$('#kpw1');if(i)i.focus()},50);return true}
+  if(a==='koeye'){var pi=$('#'+el.getAttribute('data-for'));if(pi){var on=pi.type==='password',pos=pi.selectionStart;pi.type=on?'text':'password';el.classList.toggle('on',on);el.setAttribute('aria-pressed',String(on));
+      try{pi.focus({preventScroll:true});if(pos!=null)pi.setSelectionRange(pos,pos)}catch(e){}}return true} /* Android: Fokus und Cursor bleiben beim Umschalten */
+  if(a==='kopwset'){var p1=($('#kpw1')||{}).value||'',p2=($('#kpw2')||{}).value||'',err=$('#kpwerr'),say=function(x){if(err)err.textContent=x;var g=$('#kpw1');if(x&&g&&err)try{err.scrollIntoView({block:'center'})}catch(e){}};
+    if(!pwOk(p1)){say(t('ko.pw.regel',{n:PW_MIN}));return true}
+    if(p1!==p2){say(t('ko.pw.ungleich'));return true}
+    say('');el.disabled=true;el.classList.add('busy');
+    setPassword(p1).then(function(){closeAll();toast(t('ko.pw.ok'))}).catch(function(e){el.disabled=false;el.classList.remove('busy');say(pwFehler(e))});return true}
   if(a==='kodel'){koDelSheet();return true}
   if(a==='kodelgo'){koDelGo();return true}
   if(a==='koimpno'){KOIMP=null;$('#koprev').innerHTML='';var fi=$('#koimp');if(fi)fi.value='';return true}
@@ -1724,7 +1756,7 @@ document.addEventListener('click',function(e){
   if(a==='pwset'){var cm=(($('#pwmail')||{}).value||'').trim().toLowerCase(),acct=((AUTH.user&&AUTH.user.email)||'').toLowerCase();
     if(!cm){toast('Bitte deine E-Mail zur Bestätigung eintragen.');return}
     if(!acct||cm!==acct){logout();toast('Dieser Link gehört nicht zu deinem Konto.');rerender();return}} /* Befund 6b: fremder Link → Sitzung verwerfen */
-  if(a==='pwset'){var p1=$('#pw1').value||'',p2=$('#pw2').value||'';if(p1.length<12){toast('Mindestens 12 Zeichen.');return}if(p1!==p2){toast('Die Passwörter stimmen nicht überein.');return}setPassword(p1).then(function(){AUTH.recovery=false;authSave();toast('Passwort gespeichert.');rerender()}).catch(function(e){toast('Fehler: '+e.message)});return}
+  if(a==='pwset'){var p1=$('#pw1').value||'',p2=$('#pw2').value||'',le2=$('#lerr'),sg=function(x){if(le2)le2.textContent=x;else toast(x)};if(!pwOk(p1)){sg(t0('ko.pw.regel',{n:PW_MIN}));return}if(p1!==p2){sg(t0('ko.pw.ungleich'));return}sg('');setPassword(p1).then(function(){AUTH.recovery=false;authSave();toast('Passwort gespeichert.');rerender()}).catch(function(e){sg(pwFehler(e))});return}
   if(/^ob|^mvok$/.test(a)&&obAct(a,t))return;
   if(a==='pwchange'){koAct('kopw',t);return} /* Befund 72: Formular statt prompt() */
   if(/^ko/.test(a)&&koAct(a,t))return;
@@ -1746,7 +1778,7 @@ document.addEventListener('click',function(e){
   if(a==='fquiz'){formulaQuiz(t.getAttribute('data-m'));return}
   if(a==='focus'){focusTimer();return}
   if(a==='h'){var hs=haeppchen(),x=hs[+t.getAttribute('data-i')];if(!x)return;
-    if(x.act==='session')runSession(x.exam,x.sid);else if(x.act==='diag')startDiag(x.exam);else if(x.act==='review'){runReview(MOD[x.mod],x.key)}else if(x.act==='cards'){runDeck(dueCards(),'Fällige Karteikarten',function(){hMark(x.key)})}else if(x.act==='topic')runTopic(x.tid,x.key);else if(/^sp/.test(x.act))spHRun(x);return}
+    if(x.act==='session')runSession(x.exam,x.sid,false,x.teil);else if(x.act==='diag')startDiag(x.exam);else if(x.act==='review'){runReview(MOD[x.mod],x.key)}else if(x.act==='cards'){runDeck(dueCards(),'Fällige Karteikarten',function(){hMark(x.key)})}else if(x.act==='topic')runTopic(x.tid,x.key);else if(/^sp/.test(x.act))spHRun(x);return}
   if(a==='theme'){var th=t.getAttribute('data-t');S.theme=th==='auto'?null:th;if(S.theme)document.documentElement.setAttribute('data-theme',th);else document.documentElement.removeAttribute('data-theme');save();rerender();return}
   if(a==='export'){var txt=JSON.stringify(S);try{navigator.clipboard.writeText(txt).then(function(){toast('Kopiert! Auf dem anderen Gerät einfügen.')},function(){fallback()})}catch(err){fallback()}function fallback(){var ta=$('#imp');ta.value=txt;ta.select();toast('Text markiert: jetzt kopieren.')}return}
   if(a==='import'){try{var o=JSON.parse($('#imp').value);if(!o||typeof o!=='object')throw 0;S=o;SECTIONS.forEach(function(k){S[k]=S[k]||{}});S.xp=S.xp||0;save();rerender();toast('Fortschritt übernommen.')}catch(err){toast('Das hat nicht geklappt. Bitte den ganzen kopierten Text einfügen.')}return}
@@ -1861,14 +1893,14 @@ function testerCard(){if(SY.role!=='tester'||S.ui.testerOk)return '';
 function syLater(){if(!syncAllowed())return;clearTimeout(syTimer);syTimer=setTimeout(function(){syncNow(true)},4000)}
 function syStatus(){if(!loggedIn())return 'Nicht angemeldet';if(SY.err)return '<span class="badc">Problem: '+esc(SY.err)+'</span>';if(!SY.last)return 'Angemeldet, noch nicht synchronisiert';var d=new Date(SY.last);return '<span class="okc">Synchron</span> · zuletzt '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' Uhr'}
 function syncCard(){var u=AUTH.user||{};return '<div class="card"><b>Konto und Geräte-Sync</b><p class="small" style="margin:6px 0">Angemeldet als <b class="nosnap">'+esc(u.email||'')+'</b></p><p class="small" id="systat" style="margin:6px 0">'+syStatus()+'</p><p class="small muted">Fortschritt, Pläne und Einstellungen gleichen sich automatisch ab: beim Öffnen, alle 2 Minuten und kurz nach jeder Änderung. Ohne Internet läuft alles weiter und wird später nachgetragen.</p><div class="btns"><button class="btn sm" data-act="syncnow">Jetzt synchronisieren</button><button class="btn sm ghost" data-act="pwchange">Passwort ändern</button><button class="btn sm ghost" data-act="logout">Abmelden</button></div></div>'}
-function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;D.mods.forEach(function(m){var c=m._counts||{};nT+=c.tasks||(m.tasks||[]).length;nF+=c.formulas||(m.formulas||[]).length});var nM=D.mods.filter(function(m){return m.id!=='spa'&&m.id!=='studium'}).length;
+function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;var sm=D.mods.filter(function(m){return sichtbar(m.id)});sm.forEach(function(m){var c=m._counts||{};nT+=c.tasks||(m.tasks||[]).length;nF+=c.formulas||(m.formulas||[]).length});var nM=sm.filter(function(m){return m.id!=='spa'&&m.id!=='studium'}).length; /* versteckte Fächer zählen nicht mit */
   return '<div class="lg"><div class="lg-sky" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="lg-in">'+
   '<section class="lg-hero"><div class="lg-mark">'+SQSVG+'</div><p class="lg-kick">WiIng Bau · RWTH Aachen · WS 26/27</p><h1>Dein Semester.<br><span>Ein Plan.</span></h1>'+
   '<p class="lg-sub">Vorlesungen als Lerntexte, eigene Aufgaben mit Lösungsweg, Fristen und Lernpläne – auf jedem Gerät derselbe Stand.</p>'+
   '<p class="lg-by"><b>Von RWTH-Studenten für RWTH-Studenten.</b><span>Gerade: Wirtschaftsingenieurwesen Bau, 1. Semester – weitere Studiengänge folgen.</span></p>'+
   '<ul class="lg-stats"><li><b>'+nM+'</b><span>Fächer</span></li><li><b>'+nT+'</b><span>Aufgaben</span></li><li><b>'+nF+'</b><span>Formeln</span></li><li><b>∞</b><span>Zufallszahlen</span></li></ul></section>'+
   '<section class="lg-card" aria-label="'+(rec?'Neues Passwort setzen':'Anmelden')+'">'+
-  (rec?'<h2>'+(rec==='invite'?'Passwort festlegen':'Neues Passwort')+'</h2><p class="small muted">Für das Konto <b id="pwacct" class="nosnap">'+esc((AUTH.user&&AUTH.user.email)||'')+'</b>. Mindestens 12 Zeichen mit Groß- und Kleinbuchstaben, Zahl und Sonderzeichen.</p>'+
+  (rec?'<h2>'+(rec==='invite'?'Passwort festlegen':'Neues Passwort')+'</h2><p class="small muted">Für das Konto <b id="pwacct" class="nosnap">'+esc((AUTH.user&&AUTH.user.email)||'')+'</b>. '+t('ko.pw.regel',{n:PW_MIN})+'</p>'+
      '<label class="lg-f"><input id="pwmail" type="email" placeholder=" " autocomplete="email" required><span>Deine E-Mail zur Bestätigung</span></label>'+
      '<label class="lg-f"><input id="pw1" type="password" placeholder=" " autocomplete="new-password"><span>Neues Passwort</span></label>'+
      '<label class="lg-f"><input id="pw2" type="password" placeholder=" " autocomplete="new-password"><span>Noch einmal</span></label>'+
