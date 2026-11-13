@@ -10,7 +10,7 @@
   function start(){
     var D=window.DATA,P=window.DATA_PART||{};
     D.mods.forEach(function(m){var part=P[m.id]||{};m.lectures=part.lectures||[];m.tasks=part.tasks||[];m.formulas=part.formulas||[]});
-    try{if(sel&&navigator.serviceWorker&&navigator.serviceWorker.controller)navigator.serviceWorker.controller.postMessage({keep:[core].concat(sel.map(function(k){return (D.files||{})[k]}).filter(Boolean))})}catch(e){} /* Service Worker hält nur die gewählten */
+    try{if(sel&&navigator.serviceWorker&&navigator.serviceWorker.controller)navigator.serviceWorker.controller.postMessage({keep:[core].concat(sel.map(function(k){return (D.files||{})[k]}),sel.map(function(k){return (D.filesF||{})[k]})).filter(Boolean)})}catch(e){} /* Service Worker hält nur die gewählten */
     return load('taskgen.js?v='+ver).then(function(){return load('app.js?v='+ver)});
   }
   function fail(e){if(main)main.innerHTML='<section class="sec"><div class="card empty">Die Inhalte konnten nicht geladen werden.<br><small>'+String(e&&e.message||e).replace(/</g,'&lt;')+'</small><br><br><button class="btn" onclick="location.reload()">Noch einmal versuchen</button></div></section>'}

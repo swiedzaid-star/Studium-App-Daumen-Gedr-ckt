@@ -260,5 +260,9 @@
  "ko.pw.f.reauth": "Zur Sicherheit: bitte einmal abmelden, neu anmelden und dann das Passwort ändern.",
  "ko.pw.f.sitzung": "Deine Anmeldung ist abgelaufen. Bitte neu anmelden und dann das Passwort ändern.",
  "ko.pw.f.limit": "Zu viele Versuche. Bitte in ein paar Minuten noch einmal.",
- "ko.pw.f.allg": "Das hat nicht geklappt ({m}). Bitte über „Melden“ Bescheid geben."
+ "ko.pw.f.allg": "Das hat nicht geklappt ({m}). Bitte über „Melden“ Bescheid geben.",
+ "fx.laden": "Schritte und Bild laden …",
+ "fx.offline": "Die Rechenschritte und das Bild zu dieser Formel brauchen einmal Internet. Bitte später noch einmal öffnen.",
+ "anim.laden": "Animation lädt …",
+ "anim.offline": "Die Animation braucht einmal Internet. Bitte später noch einmal öffnen."
 }

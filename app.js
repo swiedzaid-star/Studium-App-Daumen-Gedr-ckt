@@ -120,9 +120,25 @@ buildIndex();
 /* Fehlende Fach-Dateien nachladen (Onboarding, Fächerwechsel, Gerät ohne Auswahl) – ohne Neustart */
 function ensureMods(ids){var P=window.DATA_PART=window.DATA_PART||{},files=D.files||{},need=(ids||[]).filter(function(id){return files[id]&&!P[id]&&sichtbar(id)});
   return Promise.all(need.map(function(id){return new Promise(function(ok,bad){var sc=document.createElement('script');sc.src=files[id];sc.onload=function(){ok()};sc.onerror=function(){bad(new Error('Laden fehlgeschlagen: '+files[id]))};document.head.appendChild(sc)})}))
-   .then(function(){(D.mods||[]).forEach(function(m){var part=P[m.id];if(part){m.lectures=part.lectures||[];m.tasks=part.tasks||[];m.formulas=part.formulas||[]}});buildIndex();swKeep()})}
-function swKeep(){try{var c=document.querySelector('script[data-core]'),keep=[c&&c.getAttribute('data-core')].concat((chosen()||[]).filter(sichtbar).map(function(id){return (D.files||{})[id]})).filter(Boolean);
+   .then(function(){(D.mods||[]).forEach(function(m){var part=P[m.id];if(part){m.lectures=part.lectures||[];m.tasks=part.tasks||[];m.formulas=part.formulas||[]}});buildIndex();swKeep();setTimeout(idleF,800)})}
+function swKeep(){try{var c=document.querySelector('script[data-core]'),ch=(chosen()||[]).filter(sichtbar),keep=[c&&c.getAttribute('data-core')].concat(ch.map(function(id){return (D.files||{})[id]}),ch.map(function(id){return (D.filesF||{})[id]})).filter(Boolean);
   if(navigator.serviceWorker&&navigator.serviceWorker.controller)navigator.serviceWorker.controller.postMessage({keep:keep})}catch(e){}}
+/* Auftrag 81: Die schweren Formel-Teile (Bild, Rechenschritte, typische Fehler, Wozu) und die Animationen liegen je Fach in
+   data-<fach>-f.<hash>.js. Geladen wird im Leerlauf nach dem Start (idleF) und sofort, wenn ein Formel-Fenster oder eine
+   Animation sie braucht (ensureF). Marken aus dem Bau: formel._f / vorlesung._fa = „dazu gehört noch etwas“. */
+var FLOAD={};
+function applyF(id){var F=(window.DATA_PART_F||{})[id],m=MOD[id];if(!F||!m||m._f)return;
+  (m.formulas||[]).forEach(function(f){var x=(F.formulas||{})[f.id];if(!x)return;Object.keys(x).forEach(function(k){if(k==='psvg')Object.keys(x.psvg).forEach(function(i){if(f.parts&&f.parts[i])f.parts[i].svg=x.psvg[i]});else f[k]=x[k]})});
+  (m.lectures||[]).forEach(function(l){var a=(F.anims||{})[l.id];if(a)l.anims=a.concat(l.anims||[])});m._f=true}
+function fDa(id){var m=MOD[id];return !m||!!m._f||!(D.filesF||{})[id]||!(window.DATA_PART||{})[id]}
+function ensureF(id){if(fDa(id))return Promise.resolve();if((window.DATA_PART_F||{})[id]){applyF(id);return Promise.resolve()}
+  return FLOAD[id]||(FLOAD[id]=new Promise(function(ok,bad){var sc=document.createElement('script');sc.src=D.filesF[id];sc.async=true;
+    sc.onload=function(){applyF(id);ok()};sc.onerror=function(){delete FLOAD[id];if(sc.parentNode)sc.parentNode.removeChild(sc);bad(new Error('Laden fehlgeschlagen: '+D.filesF[id]))};document.head.appendChild(sc)}))}
+function idleF(){if(window.__keinLeerlauf===1)return;var ids=(chosen()||MODS.map(function(m){return m.id})).filter(function(id){return sichtbar(id)&&!fDa(id)});
+  (function next(){var id=ids.shift();if(!id)return;var run=function(){ensureF(id).then(next,next)};if(window.requestIdleCallback)requestIdleCallback(run,{timeout:3000});else setTimeout(run,400)})()}
+/* Seite wartet auf die schweren Teile: nach dem Laden neu zeichnen (nur wenn man noch auf derselben Seite ist) */
+function fWait(mod){var h0=location.hash;ensureF(mod).then(function(){if(location.hash===h0&&main.querySelector('.fwait'))route(true)},
+  function(){$$('.fwait',main).forEach(function(el){el.innerHTML='<span class="muted small">'+t('anim.offline')+'</span>'})})}
 function setMods(ids,paket){S.mods=ORDER.filter(function(id){return ids.indexOf(id)>=0}).concat(ids.filter(function(id){return ORDER.indexOf(id)<0}));S.paket=paket||null;save();return ensureMods(S.mods)}
 function cls(id){return 'm-'+(id||'studium')}
 function termsOf(m){var a=[];m.lectures.forEach(function(l){(l.terms||[]).forEach(function(t){a.push(t)})});return a}
@@ -298,7 +314,8 @@ function tourMaybe(force){var k=tourKey(),steps=k&&D.tour&&D.tour[k];if(!steps||
   if(!force&&S.ui.tour[k])return;if(!layer.hidden||document.querySelector('.tourc'))return;TOUR.key=k;TOUR.i=0;tourDraw()}
 function tourClear(){if(TOUR.el)TOUR.el.classList.remove('tourhl');TOUR.el=null}
 function tourDraw(){tourClear();var old=document.querySelector('.tourc');if(old)old.remove();var steps=D.tour[TOUR.key],st=steps[TOUR.i];if(!st)return tourEnd();
-  var el=tourFind(st);if(el){el.classList.add('tourhl');TOUR.el=el;try{el.scrollIntoView({block:'center',behavior:'smooth'})}catch(e){}}
+  var el=tourFind(st);if(!el&&st.has&&st.sel!=='nav'){TOUR.i++;return tourDraw()} /* Abschnitt gibt es heute nicht (z. B. nichts zum Nachbereiten): Schritt auslassen */
+  if(el){el.classList.add('tourhl');TOUR.el=el;try{el.scrollIntoView({block:'center',behavior:'smooth'})}catch(e){}}
   var last=TOUR.i===steps.length-1,c=document.createElement('div');c.className='tourc';c.setAttribute('role','dialog');c.setAttribute('aria-live','polite');
   c.innerHTML='<div class="tour-sq" aria-hidden="true">'+SQSVG+'</div><div class="tour-b"><p class="tour-t"></p><div class="tour-f"><span class="tour-n">'+(TOUR.i+1)+'/'+steps.length+'</span><button class="btn sm ghost" data-act="tourskip">Alles klar</button><button class="btn sm" data-act="tournext">'+(last?'Fertig':'Weiter')+'</button></div></div>';
   c.querySelector('.tour-t').textContent=st.t;document.body.appendChild(c);var b=c.querySelector('[data-act=tournext]');if(b)b.focus({preventScroll:true})}
@@ -615,6 +632,7 @@ function vLecture(m,l){
       if(bk.tip!=null)return '<div class="tipbox">'+bk.tip+'</div>';
       if(bk.f!=null){var f=FORM[bk.f];return f?'<div class="flist one">'+fxCard(f)+'</div>':''}
       if(bk.v!=null){var v=vis[bk.v];return v?'<figure class="fig"><div class="ft">'+esc(v.title||'')+'</div>'+v.svg+(v.caption?'<figcaption>'+v.caption+'</figcaption>':'')+'</figure>':''}
+      if(bk.anim!=null&&l._fa&&!fDa(m.id)){fWait(m.id);return '<div class="card fwait"><div class="bootspin"></div><span class="muted small">'+t('anim.laden')+'</span></div>'}
       if(bk.anim!=null){var an=typeof bk.anim==='number'?(l.anims||[])[bk.anim]:(l.anims||[]).find(function(z){return z.id===bk.anim});return an?animHtml(an):''}
       if(bk.ex!=null){var e=typeof bk.ex==='object'?bk.ex:exs[bk.ex];if(!e)return '';var i=exi++;return '<div class="card ex" data-ex="'+i+'"><h3>'+e.title+'</h3><ol class="steps">'+(e.steps||[]).map(function(st,j){return '<li'+(j>0?' hidden':'')+'>'+st+'</li>'}).join('')+'</ol>'+((e.steps||[]).length>1?'<div class="btns"><button class="btn sm soft" data-act="step">Nächster Schritt</button><button class="btn sm ghost" data-act="stepall">Alle zeigen</button></div>':'')+'</div>'}
       return ''}).join('')+'</section>';
@@ -663,7 +681,13 @@ function formulaAnim(f){var H=[];(f.parts||[]).forEach(function(p){hlIds(p).forE
 function lectureAnim(mod,aid){var r=null;((MOD[mod]||{}).lectures||[]).forEach(function(l){(l.anims||[]).forEach(function(a){if(a.id===aid)r=a})});return r}
 function partsList(f){return '<div class="list parts">'+(f.parts||[]).map(function(p,i){var s=p.ref&&D.symbols[p.ref];
      return '<button class="item" data-act="part" data-f="'+esc(f.id)+'" data-i="'+i+'"><span class="psym">'+mx(p.sym)+'</span><span class="grow"><span class="t">'+esc(p.name)+(unitOk(p.unit)?' <span class="chip">'+esc(p.unit)+'</span>':'')+'</span><div class="s">'+(p.d||'')+'</div>'+(p.effect?'<div class="s eff">'+esc(p.effect)+'</div>':'')+'</span>'+(s||p.svg?'<span class="chev">'+IC.chev+'</span>':'')+'</button>'}).join('')+'</div>'}
-function openFormula(id){var f=FORM[id];if(!f)return;var la=f.anim&&lectureAnim(f.mod,f.anim);
+/* mode: leer = normal öffnen · 'da' = Wartefenster ersetzen · 'ohne' = Laden ging nicht, Kopfdaten mit Hinweis zeigen */
+function openFormula(id,mode){var f=FORM[id];if(!f)return;
+  if(!mode&&(f._f||f.anim)&&!fDa(f.mod)){
+    sheet('<div class="'+cls(f.mod)+' fxsheet"><div class="eyebrow">'+esc(SHORT[f.mod])+' · Formel</div><h2 style="margin-top:4px">'+esc(f.name)+'</h2><div class="fxbig">\\['+texSafe(texBreak(f.tex))+'\\]</div><div class="fwait"><div class="bootspin"></div><span class="muted small">'+t('fx.laden')+'</span></div></div>',{title:'Formel'});
+    var top=stack[stack.length-1],da=function(m2){return function(){if(stack[stack.length-1]===top)openFormula(id,m2)}};
+    ensureF(f.mod).then(da('da'),da('ohne'));return}
+  var la=f.anim&&lectureAnim(f.mod,f.anim);
   var h='<div class="'+cls(f.mod)+' fxsheet"><div class="eyebrow">'+esc(SHORT[f.mod])+' · Formel</div><h2 style="margin-top:4px">'+esc(f.name)+'</h2>';
   if(f.player===true&&(f.why||(f.steps||[]).length||(f.parts||[]).length)){
     h+=animHtml(formulaAnim(f),{textBtn:true,notitle:true})+'<h3 class="sh">Die Bausteine <span class="chip acc">antippen</span></h3>'+partsList(f)+(la?'<h3 class="sh">Als Animation</h3>'+animHtml(la):'')}
@@ -674,7 +698,8 @@ function openFormula(id){var f=FORM[id];if(!f)return;var la=f.anim&&lectureAnim(
      ((f.steps||[]).length?'<h3 class="sh">So rechnest du</h3><ol class="fsteps">'+f.steps.map(function(x){return '<li>'+(x.t||'')+(x.f?'<div class="fxs">\\['+texSafe(x.f)+'\\]</div>':'')+(x.why?'<span class="why">Warum: '+x.why+'</span>':'')+'</li>'}).join('')+'</ol>':(f.ex?'<div class="card" style="margin-top:12px"><b>Beispiel:</b> '+f.ex+'</div>':''))+
      ((f.mistakes||[]).length?'<h3 class="sh">Typische Fehler</h3><ul class="fmist">'+f.mistakes.map(function(m){return '<li><span class="bad-x">✗</span> '+m+'</li>'}).join('')+'</ul>':'')+
      (unitOk(f.unit)?'<p class="small" style="margin-top:10px"><b>Einheit:</b> '+f.unit+'</p>':'')}
-  sheet(h+'</div>',{title:'Formel'});
+  if(mode==='ohne'&&(f._f||f.anim))h+='<div class="card small muted" style="margin-top:12px">'+t('fx.offline')+'</div>';
+  sheet(h+'</div>',{title:'Formel',replace:!!mode});
 }
 function openPart(fid,i){var f=FORM[fid],p=f&&f.parts[i];if(!p)return;if(p.ref&&D.symbols[p.ref])openSymbol(p.ref,p);
   else sheet('<div class="symcard"><div class="symbig">'+mx(p.sym)+'</div>'+(p.svg?'<div class="psvg">'+p.svg+'</div>':'')+'<h2>'+esc(p.name)+'</h2><div class="card ctx"><b>In dieser Formel:</b> '+(p.d||'')+'</div>'+(unitOk(p.unit)?'<div class="card"><b>Einheit:</b> '+esc(p.unit)+'</div>':'')+(p.effect?'<div class="card"><b>Wirkung:</b> '+esc(p.effect)+'</div>':'')+(unitOk(f.unit)?'<div class="card"><b>Einheit der Formel:</b> '+f.unit+'</div>':'')+'</div>',{title:'Baustein'})}
@@ -1809,7 +1834,13 @@ function checkUpdate(){if(!MYVER||updShown||!window.fetch)return;fetch('index.ht
 /* Wenn die App aus dem Hintergrund zurückkommt und gerade nichts offen ist: still neu laden */
 document.addEventListener('visibilitychange',function(){if(!document.hidden&&updShown&&layer.hidden)location.reload()});
 setTimeout(checkUpdate,4000);setInterval(checkUpdate,5*60000);document.addEventListener('visibilitychange',function(){if(!document.hidden)checkUpdate()});
-if('serviceWorker' in navigator&&location.protocol!=='file:'){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}
+if('serviceWorker' in navigator&&location.protocol!=='file:'){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})});
+  /* Erster Besuch: Der Service Worker übernimmt erst nach dem Laden. Dann sagen wir ihm, was die Seite schon geholt hat
+     (swWarm) und welche Inhalt-Dateien gebraucht werden (swKeep) – so ist die App nach dem ersten Laden offline vollständig. */
+  navigator.serviceWorker.addEventListener('controllerchange',function(){swKeep();swWarm()})}
+function swWarm(){try{var c=navigator.serviceWorker.controller;if(!c||!window.performance||!performance.getEntriesByType)return;
+  var urls=[location.origin+location.pathname].concat(performance.getEntriesByType('resource').map(function(r){return r.name})).filter(function(u,i,a){return u.indexOf(location.origin+'/')===0&&!/[?&]t=/.test(u)&&!/\/sw\.js/.test(u)&&a.indexOf(u)===i});
+  c.postMessage({warm:urls})}catch(e){}}
 /* ================= Sync Handy ↔ Laptop (privates GitHub-Gist) ================= */
 /* ================= Konto und Sync (Supabase, EU Frankfurt) ================= */
 var SB_URL='https://qmbkrqsindnyvqjamsvr.supabase.co',SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFtYmtycXNpbmRueXZxamFtc3ZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI5MjkyNTcsImV4cCI6MjEwODUwNTI1N30.FkQVta2pJioXt4bjdKwhNl06FVQVAgS8Bls5JRfwVJU';
@@ -1911,6 +1942,7 @@ function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;var sm=D.mod
      '<p class="lg-caps" id="lcaps">Feststelltaste ist aktiv.</p><button class="btn lg-go" data-act="login">Anmelden '+IC.chev+'</button><button class="lg-link" data-act="forgot">Passwort vergessen?</button>')+
   '<p class="small badc" id="lerr" role="alert"></p><p class="lg-foot">Privat. Keine Registrierung. Daten in der EU. <a class="lg-link" href="#/datenschutz">'+t('ko.datenschutz')+'</a> · <a class="lg-link" href="#/impressum">'+t('recht.impressum')+'</a><br>'+t('recht.hilfe')+' '+supportMail()+'</p></section></div></div>'}
 document.addEventListener('keyup',function(e){var c=document.getElementById('lcaps');if(c&&e.getModifierState&&document.activeElement&&document.activeElement.id==='lpw')c.classList.toggle('on',e.getModifierState('CapsLock'))});
+setTimeout(idleF,1200);
 setTimeout(function(){syncNow(true)},1500);setInterval(function(){if(!document.hidden)syncNow(true)},120000);
 document.addEventListener('visibilitychange',function(){syncNow(true)});window.addEventListener('online',function(){syncNow(true)});
 window.__dbg={S:function(){return S},isGroupEv:isGroupEv,mergeByTs:mergeByTs,spItems:spItems,termQuestions:termQuestions,TERM:function(){return TERM},MOD:MOD,formulaItems:formulaItems,runItems:runItems,dynItems:dynItems,dynEval:dynEval,symGaps:symGaps,symKeys:symKeys,D:D,weeklyOn:weeklyOn,pd:pd};

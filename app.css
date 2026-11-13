@@ -703,6 +703,8 @@ mjx-container.mjwide{display:inline-block;max-width:100%;overflow-x:auto;overflo
 .note-l{margin:0 0 6px}.note-l:last-child{margin:0}.note-l b.nl{color:var(--acc)}
 
 .boot{display:flex;flex-direction:column;align-items:center;gap:12px;padding:120px 16px}.bootspin{width:28px;height:28px;border-radius:50%;border:3px solid var(--acc-soft,#eee);border-top-color:var(--acc,#f90);animation:bootspin .9s linear infinite}@keyframes bootspin{to{transform:rotate(360deg)}}
+/* Ladehinweis, solange die Formel-Teile/Animationen eines Fachs nachgeladen werden (Auftrag 81) */
+.fwait{display:flex;align-items:center;justify-content:center;gap:10px;padding:18px 12px;margin-top:12px}.fwait .bootspin{width:20px;height:20px;border-width:2px;flex:none}
 
 /* ===== Anmeldeseite ===== */
 body.pg-login{background:#141a2e;padding:0!important}

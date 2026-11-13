@@ -1,1 +1,0 @@
-window.DATA_PART=window.DATA_PART||{};window.DATA_PART["spa"]={"lectures":[],"tasks":[],"formulas":[]};
