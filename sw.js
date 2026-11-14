@@ -1,6 +1,6 @@
 /* Offline-Speicher: App-Dateien immer frisch aus dem Netz, ohne Netz aus dem Speicher. */
 var CACHE='studium-v2';var HASHED=/\/data-[a-z0-9-]+\.[0-9a-f]{8}\.js$/; /* auch data-<fach>-f.<hash>.js (Formel-Teile, Auftrag 81) */
-var CORE=['./','index.html','manifest.json','icon-180.png','icon-192.png','icon-512.png','icon.svg','sky.svg','scene-studium-light.svg','scene-studium-dark.svg'];
+var CORE=['./','index.html','manifest.json','icon-180.png','icon-192.png','icon-512.png','icon-maskable-192.png','icon-maskable-512.png','icon-mono-192.png','favicon-32.png','favicon-16.png','icon.svg','sky.svg','scene-studium-light.svg','scene-studium-dark.svg'];
 self.addEventListener('install',function(e){e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(CORE)}).then(function(){return self.skipWaiting()}))});
 self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==CACHE}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});
 self.addEventListener('fetch',function(e){var req=e.request;if(req.method!=='GET')return;var u=new URL(req.url);

@@ -1,4 +1,4 @@
-/* Studium-App · läuft komplett im Browser, Fortschritt in localStorage */
+/* Skuro (Lern-App) · läuft komplett im Browser, Fortschritt in localStorage */
 (function(){
 'use strict';
 var D = window.DATA || {mods:[],studium:{},symbols:{}};
@@ -26,6 +26,13 @@ try{reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches}c
    in Supabase (Authentication → Passwortregel) stellt der Inhaber denselben Wert ein. */
 var PW_MIN=8;
 function pwOk(p){p=String(p||'');return p.length>=PW_MIN&&/[a-zäöüß]/.test(p)&&/[A-ZÄÖÜ]/.test(p)&&/\d/.test(p)&&/[^A-Za-zÄÖÜäöüß0-9]/.test(p)}
+/* Registrierung (E3): hier oben, weil die erste Seite (route) schon vor dem Rest der Datei gezeichnet wird. Erklärung bei lgReg() */
+/* Chef #82 (LAUNCH-2a): Umzug auf skuro.app – bleibt AUS (an:false), bis der Chef das Go gibt.
+   an:true, live:false = Ankündigung auf der alten Adresse („zieht um“, vorher synchronisieren, noch kein Link);
+   an:true, live:true  = „ist umgezogen“ mit Link auf der alten Adresse, auf skuro.app ein Satz auf der Anmeldeseite.
+   Test-Schalter: window.__umzug = 'bald' | 'alt' | 'neu'. */
+var UMZUG={an:true,live:false,datum:'Sonntag, 16.11.',kurz:'16.11.', /* Chef #96: Ankündigung ab Sa 14.11. (Paket 1), Umschalt-Tag So 16.11. 14 Uhr; danach live:true */ neu:'https://skuro.app/',neuHost:/^(www\.)?skuro\.app$/},UMZ={ok:0},UMZ_SP='studium-umz-spaeter',UMZ_OK='studium-umz-ok'; /* Schlüssel am Dateianfang: die erste Seite braucht sie (#91) */
+var ANF=null, /* E3 Fassung 3; Chef #80: kein Vorname in der App, der Text nennt „das Skuro-Team“ (i18n warte.*) */ SYNC_MAX=1.5*1024*1024, /* Befund 88: in BYTES, mit Abstand zur Datenbank-Grenze 2 MB (jsonb::text setzt Leerzeichen, Umlaute = 2 Bytes) */REGISTRIERUNG_AN=false,LGMODE='login',LGMAIL='',ZUG=null;
 var KEY='studium-v1', S;
 var DEVID=(function(){try{var d=localStorage.getItem('device');if(!d){d=Math.random().toString(36).slice(2,10);localStorage.setItem('device',d)}return d}catch(e){return 'x'}})(),DEVNAME=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)?'Handy':'Laptop';
 var SYNCKEY='studium-sync',SY;try{SY=JSON.parse(localStorage.getItem(SYNCKEY))||{}}catch(e){SY={}}
@@ -261,7 +268,7 @@ function route(keep){try{ensureFixPlans()}catch(e){}
   document.body.setAttribute('data-page',v==='fach'&&MOD[p[1]]?'fach':v);['mathe','stat','bsk','bure','gdm','mech','spa','studium','de-a1'].forEach(function(k){document.body.classList.remove('pg-'+k)});if(v==='fach'&&MOD[p[1]])document.body.classList.add('pg-'+p[1]);if(v==='studium'||v==='symbole'||v==='konto')document.body.classList.add('pg-studium');
   try{
     document.body.classList.remove('pg-login');
-    if(v==='impressum'||v==='datenschutz'){main.innerHTML=vRecht(v);meldenBtn();document.body.setAttribute('data-page','recht');document.body.classList.add('pg-studium');document.body.classList.toggle('pg-login',!loggedIn()||!!AUTH.recovery);window.scrollTo(0,0);return} /* D1: auch ohne Anmeldung */
+    if(v==='impressum'||v==='datenschutz'||v==='nutzungsbedingungen'){main.innerHTML=vRecht(v);meldenBtn();document.body.setAttribute('data-page','recht');document.body.classList.add('pg-studium');document.body.classList.toggle('pg-login',!loggedIn()||!!AUTH.recovery);window.scrollTo(0,0);return} /* D1: auch ohne Anmeldung */
     if(!loggedIn()||AUTH.recovery){main.innerHTML=vLogin();meldenBtn();document.body.setAttribute('data-page','login');document.body.classList.add('pg-studium','pg-login');window.scrollTo(0,0);return}
     if(S.mods==null&&v!=='start'){startGate();main.innerHTML='<div class="boot"><div class="bootspin"></div><div class="muted small">'+t('ob.laden')+'</div></div>';meldenBtn();return}
     document.body.classList.toggle('pg-ob',v==='start'&&p[1]!=='edit'); /* erstes Onboarding: ohne Navigation und Melden-Knopf */
@@ -278,7 +285,7 @@ function route(keep){try{ensureFixPlans()}catch(e){}
   }catch(err){html='<div class="wrap"><p class="empty">Hier ist etwas schiefgelaufen: '+esc(err.message)+'</p></div>';console.error(err)}
   main.innerHTML=html;animInit(main);meldenBtn();
   $$('.nav a').forEach(function(a){a.classList.toggle('on',a.getAttribute('data-v')===(v==='fach'||v==='studium'||v==='symbole'?'faecher':v))});
-  var nb=$('#navbadge'),mc=missed().length;if(nb){nb.textContent=mc;nb.hidden=!mc}
+  var nb=$('#navbadge'),mc=missed().length;if(nb){nb.textContent=mc;nb.hidden=!mc}anfBadge();
   window.scrollTo(0,keep?y:0);var tp=ts(main);if(keep&&y){ /* Lesestelle halten: nach dem Formelsatz verschieben sich Höhen, deshalb noch einmal hinspringen */ tp.then(function(){window.scrollTo(0,y)})}
   if(!keep){var oc=document.querySelector('.tourc');if(oc){oc.remove();tourClear();TOUR.key=null}}setTimeout(function(){tourMaybe(false)},700);
   var on=$('.tabs .on',main);if(on&&on.scrollIntoView)try{on.scrollIntoView({inline:'center',block:'nearest'})}catch(e){}
@@ -323,7 +330,7 @@ function tourEnd(){tourClear();var c=document.querySelector('.tourc');if(c)c.rem
 function hideSquirrel(){
   var old=document.querySelector('.sqh');if(old)old.remove();
   var h=location.hash||'#/heute',pos=SQPOS[h];if(!pos)pos=SQPOS[h]={side:Math.random()<.5?'l':'r',f:Math.random()};
-  var d=document.createElement('button');d.className='sqh';d.setAttribute('aria-label','Eichhörnchen');d.innerHTML=SQSVG;
+  var d=document.createElement('button');d.className='sqh';d.setAttribute('aria-label',t('skuro.aria'));d.innerHTML=SQSVG;
   var wrap=main.querySelector('.wrap'),cw=wrap?wrap.getBoundingClientRect().width:800,margin=(innerWidth-cw)/2;
   if(margin>=170){ /* Desktop: im freien Seitenrand, nie über Inhalten */
     var sz=Math.min(150,margin-30);d.classList.add('side');d.style.width=d.style.height=sz+'px';
@@ -335,7 +342,7 @@ function hideSquirrel(){
 window.addEventListener('resize',function(){clearTimeout(window.__sqt);window.__sqt=setTimeout(hideSquirrel,150)});
 document.addEventListener('click',function(e){var q=e.target.closest&&e.target.closest('.sqh');if(!q)return;e.preventDefault();
   q.classList.remove('hop');void q.offsetWidth;q.classList.add('hop');S.ui.sqn=(S.ui.sqn||0)+1;save();
-  var say=SQSAY.concat(sprueche(lern().zeit));toast('🐿️ '+say[Math.floor(Math.random()*say.length)]+' ('+S.ui.sqn+'× gefunden)');
+  var say=SQSAY.concat(sprueche(lern().zeit));toast('🐿️ Skuro: '+say[Math.floor(Math.random()*say.length)]+' ('+S.ui.sqn+'× gefunden)');
   if(Math.random()<.5){delete SQPOS[location.hash||'#/heute'];setTimeout(hideSquirrel,700)}});
 
 
@@ -415,15 +422,15 @@ function installCard(){if(isStandalone()||!isTouch())return '';var t=(S.ui&&S.ui
   var how=INSTALL?'<button class="btn sm" data-act="install">Installieren</button>':isIOS()?'<p class="small" style="margin:6px 0 0">Tippe unten auf <b>Teilen</b> (Quadrat mit Pfeil) und dann auf <b>Zum Home-Bildschirm</b>.</p>':'<p class="small" style="margin:6px 0 0">Öffne das Browser-Menü (⋮) und tippe auf <b>App installieren</b> bzw. <b>Zum Startbildschirm hinzufügen</b>.</p>';
   return '<section class="sec"><div class="card instc"><div class="grow"><b>Auf dem Handy installieren</b><p class="small muted" style="margin:4px 0 0">Dann startet die App wie jede andere: eigenes Symbol, Vollbild, auch offline.</p>'+how+'</div><button class="x" data-act="installno" aria-label="Später">'+IC.x+'</button></div></section>'}
 function vHeute(){
-  var lv=level(),st=streak(),mis=missed(),hs=haeppchen(),doneN=hs.filter(function(h){return hDone(h.key)}).length;
+  var lv=level(),st=streak(),hs=haeppchen(),doneN=hs.filter(function(h){return hDone(h.key)}).length;
   var weekEnd=addDays(thisMon,7);
   var wk=upcoming().filter(function(e){return e.d<addDays(TODAY,8)}).slice(0,5);
-  var h='<div class="wrap top"><div class="eyebrow">'+WDL[TODAY.getDay()]+', '+TODAY.getDate()+'. '+MON[TODAY.getMonth()]+'</div><h1>'+greet()+(S.name?', '+esc(S.name):'')+'</h1>'+sqLine()+(S.name?'':'<div class="card" style="margin-top:12px"><b>Wie heißt du?</b><p class="small muted" style="margin:4px 0 8px">Damit die App dich begrüßt. Wird mit deinen Geräten synchronisiert.</p><div class="btns"><input class="search" id="nm" placeholder="Vorname" autocomplete="given-name" style="flex:1;min-width:0"><button class="btn sm" data-act="setname">Speichern</button></div></div>')+
+  var h='<div class="wrap top"><div class="eyebrow">'+WDL[TODAY.getDay()]+', '+TODAY.getDate()+'. '+MON[TODAY.getMonth()]+'</div><h1>'+greet()+(S.name?', <span class="nosnap">'+esc(S.name)+'</span>':'')+'</h1>'+(umzZeile()||sqLine())+(S.name?'':'<div class="card" style="margin-top:12px"><b>Wie heißt du?</b><p class="small muted" style="margin:4px 0 8px">Damit die App dich begrüßt. Wird mit deinen Geräten synchronisiert.</p><div class="btns"><input class="search nosnap" id="nm" placeholder="Vorname" autocomplete="given-name" style="flex:1;min-width:0"><button class="btn sm" data-act="setname">Speichern</button></div></div>')+
    '<div class="stats"><span class="stat"><span class="fire">'+IC.fire+'</span><b>'+st+'</b> '+(st===1?'Tag':'Tage')+' Serie</span><span class="stat">'+IC.bolt+'<b>Level '+lv.l+'</b><span class="bar sm"><span style="width:'+Math.round(lv.cur/lv.need*100)+'%"></span></span></span><button class="stat" data-act="theme" data-t="'+(S.theme==='dark'?'light':S.theme==='light'?'auto':'dark')+'" aria-label="Design wechseln">'+(S.theme==='dark'?'☾ Dunkel':S.theme==='light'?'☀ Hell':'◐ Auto')+'</button></div></div>';
   h+='<div class="wrap">';
-  h+=installCard();h+=testerCard();h+=mvHintCard();
-  var sn=symNew().length;if(sn)h+='<a class="alert newsym" href="#/symbole"><b>'+sn+'</b> neue Symbole und Zeichen aus deinen Unterlagen. Jetzt lernen →</a>';
-  if(mis.length)h+='<a class="alert" href="#/fristen/verpasst"><b>'+mis.length+'</b> verpasste '+(mis.length===1?'Frist':'Fristen')+'. Kurz anschauen →</a>';
+  h+=umzugCard('heute');h+=installCard();h+=warteCard();h+=testerCard();h+=mvHintCard();
+  /* #83 „Luft“ (Inhaber 13.11.): die Hinweise „neue Symbole“ und „verpasste Fristen“ entfallen auf Heute –
+     verpasste Fristen zeigt der rote Zähler am Reiter Fristen, neue Symbole stehen unter Fächer → Symbole. */
   var stkH=lern().stil==='stueck';h+='<section class="sec"><h2>'+(stkH?t('heute.stueck'):hs.length===1?t('heute.haeppchen1'):t('heute.haeppchen',{n:hs.length}))+' <span class="chip '+(doneN===hs.length&&hs.length?'ok':'acc')+'">'+doneN+'/'+hs.length+'</span></h2>'+(S.goal?'<p class="small muted hziel">'+t(stkH?'heute.ziel.stueck':'heute.ziel',{min:S.goal})+(hs.reduce(function(a,x){return a+(x.min||0)},0)>S.goal*1.25?' · '+t('heute.ziel.viel'):'')+'</p>':''); /* Befund 84: ehrlich sagen, wenn heute mehr ansteht als das Ziel */
   if(!hs.length)h+='<div class="card empty">Heute nichts Offenes. Gönn dir eine Pause.</div>';
   h+='<div class="stack">';
@@ -615,7 +622,7 @@ function vLectures(m){
   return h;
 }
 function vLecture(m,l){
-  var d=pd(l.date),lr=lectureReady(l),h='<section class="sec"><a class="back2" href="#/fach/'+m.id+'/vorlesungen">'+IC.back+' Alle Vorlesungen</a><h2 style="font-size:1.5rem;margin-top:8px">'+esc(l.title)+'</h2><p class="muted">'+(d?WDL[d.getDay()]+', '+d.getDate()+'. '+MON[d.getMonth()]+(l.time?' · '+esc(l.time):''):'')+(d&&!lecHeld(l)?' · <b class="okc">kommt noch</b>':'')+'</p>'+
+  var d=pd(l.date),lr=lectureReady(l),h='<section class="sec"><a class="back2" href="#/fach/'+m.id+'/vorlesungen">'+IC.back+' Alle Vorlesungen</a><h2 class="lectitle">'+esc(l.title)+'</h2><p class="muted">'+(d?WDL[d.getDay()]+', '+d.getDate()+'. '+MON[d.getMonth()]+(l.time?' · '+esc(l.time):''):'')+(d&&!lecHeld(l)?' · <b class="okc">kommt noch</b>':'')+'</p>'+
     '<div class="card">'+rbar(lr.v,'Vorbereitet')+'<div class="steps3 mini" style="margin-top:10px">'+
     '<div class="st'+(lr.read?' ok':'')+'"><span class="no">'+(lr.read?IC.check:'1')+'</span><div class="grow"><b>Lesen</b><div class="s muted">Das Wichtigste und die Beispiele</div></div></div>'+
     '<div class="st'+(lr.cards!=null&&lr.cards>=.8?' ok':'')+'"><span class="no">'+(lr.cards!=null&&lr.cards>=.8?IC.check:'2')+'</span><div class="grow"><b>Begriffe</b><div class="s muted">'+(lr.cards==null?'keine':pct(lr.cards)+' % gekonnt')+'</div></div></div>'+
@@ -1006,7 +1013,7 @@ function vExams(m){
 function vExam(m,x){
   if(!x)return '<div class="card empty">Nicht gefunden.</div>';
   var di={length:diagCount(m,x)},dg=S.diag[x.id],p=S.plans[x.id];
-  var h='<section class="sec"><a class="back2" href="#/fach/'+m.id+'/pruefungen">'+IC.back+' Alle Prüfungen</a><h2 style="font-size:1.5rem;margin-top:8px">'+esc(x.name)+'</h2><p class="muted">'+(x.date?WDL[pd(x.date).getDay()]+', '+pd(x.date).getDate()+'. '+MON[pd(x.date).getMonth()]+(x.time?' · '+esc(x.time):'')+' · <b>'+rel(pd(x.date))+'</b>':'Termin offen')+(x.place?' · '+esc(x.place):'')+'</p>'+(x.note?'<div class="card small">'+noteHtml(x.note)+'</div>':'')+'</section>';
+  var h='<section class="sec"><a class="back2" href="#/fach/'+m.id+'/pruefungen">'+IC.back+' Alle Prüfungen</a><h2 class="lectitle">'+esc(x.name)+'</h2><p class="muted">'+(x.date?WDL[pd(x.date).getDay()]+', '+pd(x.date).getDate()+'. '+MON[pd(x.date).getMonth()]+(x.time?' · '+esc(x.time):'')+' · <b>'+rel(pd(x.date))+'</b>':'Termin offen')+(x.place?' · '+esc(x.place):'')+'</p>'+(x.note?'<div class="card small">'+noteHtml(x.note)+'</div>':'')+'</section>';
   var er=examReady(x),topicsHtml='';
   if(er!=null){h+='<section class="sec"><div class="card">'+rbar(er,'Bereit für '+esc(x.name))+'<p class="small muted" style="margin:8px 0 0">Rechnet sich aus deinen Übungen (70 %) und gekonnten Begriffen (30 %) je Thema.</p></div></section>';
     topicsHtml='<section class="sec"><details class="more list"><summary>Alle Themen einzeln lernen und üben</summary>'+(x.topics||[]).map(function(tid){var tp=TOPIC[tid],r=topicReady(tid),l=tp&&LECT[tp.lecture];
@@ -1194,8 +1201,9 @@ function koSeg(act,cur,opts){return '<div class="tabs koseg" role="group">'+opts
 function koSec(k,body){return '<section class="sec"><h2>'+t(k)+'</h2><div class="card kocard">'+body+'</div></section>'}
 function koRow(lbl,body,sub){return '<div class="korow"><div class="kolbl">'+lbl+(sub?'<span class="s">'+sub+'</span>':'')+'</div>'+body+'</div>'}
 function vKonto(){var u=AUTH.user||{},L=lern(),ch=chosen()||[],th=S.theme||'auto',role=SY.role||'',pk=S.paket&&(KAT.pakete||[]).find(function(x){return x.id===S.paket});
-  var h='<div class="m-studium"><div class="band"><div class="wrap"><h1>'+t('ko.title')+'</h1><p style="opacity:.9">'+(S.name?esc(S.name):t('ko.sub'))+'</p></div></div><div class="wrap konto">';
-  h+=koSec('ko.profil',koRow(t('ko.name'),'<div class="btns" style="margin:0"><input class="search" id="konm" value="'+esc(S.name||'')+'" placeholder="'+esc(t('ko.name.ph'))+'" autocomplete="given-name" maxlength="30"><button class="btn sm" data-act="konm">'+t('ob.speichern')+'</button></div>')+
+  var h='<div class="m-studium"><div class="band"><div class="wrap"><h1>'+t('ko.title')+'</h1><p style="opacity:.9">'+(S.name?'<span class="nosnap">'+esc(S.name)+'</span>':t('ko.sub'))+'</p></div></div><div class="wrap konto">';
+  h+=umzugCard('konto');
+  h+=koSec('ko.profil',koRow(t('ko.name'),'<div class="btns" style="margin:0"><input class="search nosnap" id="konm" value="'+esc(S.name||'')+'" placeholder="'+esc(t('ko.name.ph'))+'" autocomplete="given-name" maxlength="30"><button class="btn sm" data-act="konm">'+t('ob.speichern')+'</button></div>')+
     koRow(t('ko.mail'),'<b class="nosnap">'+esc(u.email||'–')+'</b>')+koRow(t('ko.pw'),'<button class="btn sm ghost" data-act="pwchange">'+t('ko.pw.btn')+'</button>'));
   h+=koSec('ko.lernen',koRow(t('ko.faecher'),'<div>'+(pk?'<div class="small muted">'+esc((pk.kurz||{}).de||pk.name.de||'')+'</div>':'')+obChips(ch)+'<div class="btns"><a class="btn sm soft" href="#/start/edit">'+t('ko.faecher.btn')+'</a></div></div>')+
     koRow(t('ko.ziel'),koSeg('kogoal',S.goal||10,OBGOALS.map(function(g){return [g[0],g[0]+' min']})),HCOUNT[S.goal||10]===1?t('ob.goal.hp1'):t('ob.goal.hp',{n:HCOUNT[S.goal||10]}))+
@@ -1208,10 +1216,12 @@ function vKonto(){var u=AUTH.user||{},L=lern(),ch=chosen()||[],th=S.theme||'auto
     koRow(t('ko.export'),'<button class="btn sm soft" data-act="koexport">'+t('ko.export.btn')+'</button>',t('ko.export.sub'))+
     koRow(t('ko.import'),'<div><label class="btn sm ghost kofile">'+t('ko.import.btn')+'<input type="file" id="koimp" accept="application/json,.json" hidden></label><div id="koprev"></div></div>',t('ko.import.sub'))+
     koRow(t('ko.fehler'),koSeg('kofehler',S.ui.fehlerAus?'aus':'an',[['an',t('ko.an')],['aus',t('ko.aus')]]),t('ko.fehler.sub')));
-  h+=koSec('ko.rolle',koRow(t('ko.rolle.du'),'<span class="chip '+(role?'acc':'')+'">'+t(role==='owner'?'ko.rolle.owner':role==='tester'?'ko.rolle.tester':'ko.rolle.keine')+'</span>'));
-  h+=koSec('ko.recht','<div class="btns" style="margin-top:0"><a class="btn sm ghost" href="#/impressum">'+t('recht.impressum')+'</a><a class="btn sm ghost" href="#/datenschutz">'+t('ko.datenschutz')+'</a><button class="btn sm ghost" data-act="terms">'+t('ko.nutzung')+'</button></div>'+
+  if(role==='owner')h+='<section class="sec"><h2>'+t('anf.title')+(Array.isArray(ANF)&&ANF.length?' <span class="chip warn">'+ANF.length+'</span>':'')+'</h2><div class="card kocard">'+koAnfragen()+'</div></section>';
+  if(role==='owner')h+=koSec('zug.title',koZugaenge());
+  h+=koSec('ko.rolle',koRow(t('ko.rolle.du'),'<span class="chip '+(role?'acc':'')+'">'+t(role==='owner'?'ko.rolle.owner':role==='tester'?'ko.rolle.tester':SY.wartet?'ko.rolle.wartet':'ko.rolle.keine')+'</span>'));
+  h+=koSec('ko.recht','<div class="btns" style="margin-top:0"><a class="btn sm ghost" href="#/impressum">'+t('recht.impressum')+'</a><a class="btn sm ghost" href="#/datenschutz">'+t('ko.datenschutz')+'</a><a class="btn sm ghost" href="#/nutzungsbedingungen">'+t('ko.nutzung')+'</a></div>'+
     '<details class="kolic"><summary>'+t('ko.lizenzen')+'</summary><ul class="small"><li>Plus Jakarta Sans, JetBrains Mono – SIL Open Font License 1.1 (site/vendor/fonts)</li><li>MathJax – Apache License 2.0 (site/vendor/mathjax)</li><li>html-to-image – MIT License (site/vendor/html-to-image)</li></ul><p class="small muted">'+t('ko.lizenzen.sub')+'</p></details>'+
-    '<p class="small muted" style="margin:8px 0 0">© 2026 swiedzaid-star</p>');
+    '<p class="small muted" style="margin:8px 0 0">Skuro · © 2026 swiedzaid-star</p>');
   h+=koSec('ko.support',koRow(t('ko.support.mail'),supportMail(),t('ko.support.sub')));
   h+='<section class="sec"><div class="btns"><button class="btn ghost" data-act="logout">'+t('ko.logout')+'</button></div>'+
     '<div class="card kodel"><b>'+t('ko.del')+'</b><p class="small" style="margin:6px 0 8px">'+t('ko.del.sub')+'</p>'+(role==='owner'?'<button class="btn sm danger" disabled aria-disabled="true">'+t('ko.del.btn')+'</button><p class="small muted" style="margin:6px 0 0">'+t('ko.del.owner')+'</p>':'<button class="btn sm danger" data-act="kodel">'+t('ko.del.btn')+'</button>')+'</div></section>';
@@ -1236,7 +1246,7 @@ window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;if(!r
 setTimeout(function(){FEHL_AN=true},0); /* erst nach dem Start: Fehler beim Laden selbst zeigt die App ohnehin an */
 /* Impressum und Datenschutz (D1): Text aus docs/rechtstexte.md (build.py → D.recht), Support-Adresse aus SUPPORT_MAIL */
 function vRecht(k){var drin=loggedIn()&&!AUTH.recovery,o=k==='impressum'?'datenschutz':'impressum';
-  return '<div class="m-studium"><div class="band"><div class="wrap"><a class="back" href="'+(drin?'#/konto':'#/')+'">'+IC.back+' '+t(drin?'recht.zurueck.konto':'recht.zurueck.login')+'</a><h1>'+t('recht.'+k)+'</h1></div></div><div class="wrap">'+
+  return '<div class="m-studium"><div class="band"><div class="wrap"><a class="back" href="'+(drin?'#/konto':'#/')+'">'+IC.back+' '+t(drin?'recht.zurueck.konto':'recht.zurueck.login')+'</a><div class="eyebrow">Skuro</div><h1>'+t('recht.'+k)+'</h1></div></div><div class="wrap">'+
     '<section class="sec"><div class="card recht">'+String((D.recht||{})[k]||'<p class="ph">'+t('recht.fehlt')+'</p>').replace(/\{SUPPORT\}/g,supportMail())+'</div></section>'+
     '<p class="small"><a href="#/'+o+'">'+t('recht.'+o)+' →</a></p></div></div>'}
 /* Konto löschen (D2): zweistufig – Fenster mit Erklärung, Wort eintippen, dann Edge Function delete-account. Danach lokal alles weg. */
@@ -1253,11 +1263,26 @@ function koDelGo(){var w=(($('#kodelw')||{}).value||'').trim(),btn=$('#kodelgo')
 /* Befund 71: Export trägt eine Kontokennung (nur SHA-256-Prüfsummen von Konto-ID und E-Mail, kein Klartext) */
 function sha16(x){try{return crypto.subtle.digest('SHA-256',new TextEncoder().encode('studium:'+x)).then(function(b){return Array.prototype.map.call(new Uint8Array(b).slice(0,8),function(n){return ('0'+n.toString(16)).slice(-2)}).join('')})}catch(e){return Promise.resolve('')}}
 function kontoId(){var u=AUTH.user||{};return Promise.all([sha16(u.id||''),sha16(String(u.email||'').toLowerCase())]).then(function(h){return {u:h[0],m:h[1]}})}
+/* Zugänge (E3 Fassung 2): Freigabeliste nur für den Inhaber. Daten kommen direkt aus der Tabelle zugaenge (RLS: nur owner). */
+function zugParse(txt){return uniq(String(txt||'').split(/[\s,;]+/).map(function(x){return x.trim().toLowerCase()}).filter(Boolean))}
+function zugOk(m){return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m)}
+function zugLaden(){return sbAuthed('/rest/v1/zugaenge?select=email,eingetragen_am,registriert_am&order=eingetragen_am.desc').then(function(r){ZUG=r||[];if(layer.hidden&&/^#\/konto/.test(location.hash))rerender()},function(e){ZUG={err:String(e.message||e)};if(/^#\/konto/.test(location.hash))rerender()})}
+function koZugaenge(){if(ZUG==null){ZUG='laed';setTimeout(zugLaden,0)} /* erst nach dem Start: SB_URL steht weiter unten in der Datei */
+  var liste=Array.isArray(ZUG)?ZUG:[],n=liste.filter(function(z){return z.registriert_am}).length;
+  return koRow(t('zug.neu'),'<div><textarea id="zugin" class="ans" rows="3" placeholder="'+esc(t('zug.ph'))+'" spellcheck="false" autocapitalize="off"></textarea><div class="btns"><button class="btn sm" data-act="kozugadd">'+t('zug.frei')+'</button></div></div>',t('zug.sub'))+
+    '<div class="korow"><div class="kolbl">'+t('zug.liste')+'<span class="s">'+(Array.isArray(ZUG)?t('zug.stand',{n:liste.length,r:n}):ZUG&&ZUG.err?'<span class="badc">'+esc(ZUG.err)+'</span>':t('zug.laed'))+'</span></div>'+
+    (liste.length?'<div class="list zug">'+liste.map(function(z){return '<div class="item"><span class="grow"><span class="t nosnap">'+esc(z.email)+'</span><div class="s">'+(z.registriert_am?'<b class="okc">'+t('zug.reg',{d:fmtD(new Date(z.registriert_am))})+'</b>':t('zug.ein',{d:fmtD(new Date(z.eingetragen_am))}))+'</div></span>'+
+      (z.registriert_am?'':'<button class="x sm" data-act="kozugdel" data-m="'+esc(z.email)+'" aria-label="'+esc(t('zug.weg',{m:z.email}))+'" title="'+esc(t('zug.entfernen'))+'">×</button>')+'</div>'}).join('')+'</div>':'')+'</div>'}
 /* Passwort ändern (Tester-Meldung 05.11.): Regeln sichtbar beim Tippen, Fehler bleiben unter den Feldern stehen (Toast verschwand
    auf dem Handy unter der Tastatur), Antworten des Servers verständlich */
 function pwChecks(p1,p2){var r=[[p1.length>=PW_MIN,t('ko.pw.c.laenge',{n:PW_MIN})],[/[A-ZÄÖÜ]/.test(p1)&&/[a-zäöüß]/.test(p1),t('ko.pw.c.gross')],[/\d/.test(p1),t('ko.pw.c.zahl')],[/[^A-Za-zÄÖÜäöüß0-9]/.test(p1),t('ko.pw.c.sonder')],[!!p2&&p1===p2,t('ko.pw.c.gleich')]];
   return r.map(function(x){return '<li class="'+(x[0]?'ok':'')+'"><span aria-hidden="true">'+(x[0]?'✓':'○')+'</span> '+x[1]+'<span class="vh">'+(x[0]?' – erfüllt':' – fehlt noch')+'</span></li>'}).join('')}
-function pwFehler(e){var m=String(e&&e.message||e),st=e&&e.status;
+function pwFehler(e){var m=String(e&&e.message||e),st=e&&e.status,c=e&&e.code||'';
+  if(c==='current_password_invalid')return t('ko.pw.f.aktfalsch'); /* Befund 114: Server meldet für „fehlt“ und „falsch“ denselben Text – nur der Code unterscheidet */
+  if(c==='current_password_required')return t('ko.pw.f.aktfehlt');
+  if(c==='reauthentication_needed')return t('ko.pw.f.reauth');
+  if(c==='same_password')return t('ko.pw.f.gleich');
+  if(c==='weak_password')return t('ko.pw.f.schwach',{n:PW_MIN});
   if(/Failed to fetch|NetworkError/i.test(m))return t('ko.pw.f.netz');
   if(/weak|at least|characters|should contain|password.*(short|length)/i.test(m))return t('ko.pw.f.schwach',{n:PW_MIN});
   if(/different|same_password|same password/i.test(m))return t('ko.pw.f.gleich');
@@ -1265,8 +1290,16 @@ function pwFehler(e){var m=String(e&&e.message||e),st=e&&e.status;
   if(st===401||/JWT|session|expired|not logged|refresh|nicht angemeldet/i.test(m))return t('ko.pw.f.sitzung');
   if(st===429||/rate|limit/i.test(m))return t('ko.pw.f.limit');
   return t('ko.pw.f.allg',{m:m.slice(0,160)})}
-document.addEventListener('input',function(e){if(!e.target||(e.target.id!=='kpw1'&&e.target.id!=='kpw2'))return;var c=$('#kpwchk');if(c)c.innerHTML=pwChecks(($('#kpw1')||{}).value||'',($('#kpw2')||{}).value||'');var er=$('#kpwerr');if(er)er.textContent=''});
+document.addEventListener('input',function(e){if(!e.target||(e.target.id!=='kpw0'&&e.target.id!=='kpw1'&&e.target.id!=='kpw2'))return;var c=$('#kpwchk');if(c)c.innerHTML=pwChecks(($('#kpw1')||{}).value||'',($('#kpw2')||{}).value||'');var er=$('#kpwerr');if(er)er.textContent=''});
 document.addEventListener('submit',function(e){if(!e.target||e.target.id!=='kpwf')return;e.preventDefault();var b=$('#kpwgo');if(b&&!b.disabled)koAct('kopwset',b)}); /* Enter/„Fertig“ auf der Tastatur speichert */
+/* Zugangsanfragen (E3 Fassung 3): Liste aus public.anfragen (RLS: nur owner), Freigeben/Ablehnen über die Function 'anfrage' */
+function anfLaden(){if(!syncAllowed())return Promise.resolve();return sbAuthed('/rest/v1/anfragen?select=user_id,email,angefragt_am,bestaetigt_am&order=angefragt_am.desc').then(function(r){ANF=r||[];anfBadge();if(layer.hidden&&/^#\/konto/.test(location.hash))rerender()},function(e){if(e&&(e.status===404||/PGRST205|42P01|schema cache/i.test(String(e.message)))){ANF=[];return}ANF={err:String(e.message||e)};if(/^#\/konto/.test(location.hash))rerender()})}
+function anfBadge(){var b=$('#navbadge2'),n=SY.role==='owner'&&Array.isArray(ANF)?ANF.length:0;if(b){b.textContent=n;b.hidden=!n}}
+function koAnfragen(){if(ANF==null){ANF='laed';setTimeout(anfLaden,0)}var l=Array.isArray(ANF)?ANF:[];
+  if(!Array.isArray(ANF))return '<p class="small muted" style="margin:12px 0">'+(ANF&&ANF.err?'<span class="badc">'+esc(ANF.err)+'</span>':t('zug.laed'))+'</p>';
+  if(!l.length)return '<p class="small muted" style="margin:12px 0">'+t('anf.leer')+'</p>';
+  return '<div class="list anf">'+l.map(function(a){return '<div class="item"><span class="grow"><span class="t nosnap">'+esc(a.email)+'</span><div class="s">'+t('anf.am',{d:fmtD(new Date(a.angefragt_am))})+' · '+(a.bestaetigt_am?'<b class="okc">'+t('anf.best')+'</b>':t('anf.unbest'))+'</div>'+
+    '<div class="btns" style="margin-top:8px"><button class="btn sm" data-act="koanf" data-v="freigeben" data-u="'+esc(a.user_id)+'" data-m="'+esc(a.email)+'">'+t('anf.frei')+'</button><button class="btn sm ghost" data-act="koanf" data-v="ablehnen" data-u="'+esc(a.user_id)+'" data-m="'+esc(a.email)+'">'+t('anf.ab')+'</button></div></span></div>'}).join('')+'</div>'}
 function koExport(){var n='studium-fortschritt-'+ymd(new Date())+'.json';
   kontoId().then(function(k){var o=JSON.parse(JSON.stringify(S));o._konto=k;var txt=JSON.stringify(o,null,1);
     var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'}));a.download=n;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1000);toast(t('ko.export.ok',{n:n}))})
@@ -1289,20 +1322,33 @@ function koAct(a,el){
   if(a==='kozeit'||a==='kostil'){var L=Object.assign({},S.lern||{});if(a==='kozeit'){L.zeit=el.getAttribute('data-v');L.uhr=((D.sprueche||{}).erinnerung||{})[L.zeit]||null}else{L.stil=el.getAttribute('data-v');L.zeit=L.zeit||null}S.lern=L;save();rerender();return true}
   if(a==='kofehler'){S.ui.fehlerAus=el.getAttribute('data-v')==='aus'?1:0;save();rerender();return true}
   if(a==='koexport'){koExport();return true}
+  if(a==='koanf'){var akt=el.getAttribute('data-v'),uid=el.getAttribute('data-u'),am=el.getAttribute('data-m');
+    if(akt==='ablehnen'&&!confirm(t('anf.ab.frage',{m:am})))return true;el.disabled=true;
+    authReady().then(function(){return fetch(SB_URL+'/functions/v1/anfrage',{method:'POST',headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+AUTH.access_token},body:JSON.stringify({aktion:akt,user_id:uid})})})
+     .then(function(r){return r.json().catch(function(){return {}}).then(function(j){if(!r.ok)throw new Error(j.error||('Fehler '+r.status));return j})})
+     .then(function(j){toast(akt==='freigeben'?(j.mail?t('anf.ok.mail',{m:am}):t('anf.ok',{m:am})):t('anf.weg',{m:am}));return anfLaden()},function(e){el.disabled=false;toast(String(e.message||e))});return true}
+  if(a==='kozugadd'){var ms=zugParse(($('#zugin')||{}).value),falsch=ms.filter(function(m){return !zugOk(m)});if(!ms.length){toast(t('zug.leer'));return true}
+    if(falsch.length){toast(t('zug.falsch',{m:falsch.slice(0,3).join(', ')}));return true}
+    el.disabled=true;sbAuthed('/rest/v1/zugaenge',{method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify(ms.map(function(m){return {email:m}}))})
+     .then(function(){toast(t('zug.ok',{n:ms.length}));var i=$('#zugin');if(i)i.value='';return zugLaden()},function(e){el.disabled=false;toast(String(e.message||e))});return true}
+  if(a==='kozugdel'){var mm=el.getAttribute('data-m');if(!confirm(t('zug.weg',{m:mm})+'?'))return true;
+    sbAuthed('/rest/v1/zugaenge?email=eq.'+encodeURIComponent(mm),{method:'DELETE',headers:{Prefer:'return=minimal'}}).then(zugLaden,function(e){toast(String(e.message||e))});return true}
   if(a==='kopw'){var f=function(id,lbl){return '<label class="lg-f"><input id="'+id+'" name="'+id+'" type="password" placeholder=" " autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done"><span>'+lbl+'</span><button type="button" class="lg-eye" data-act="koeye" data-for="'+id+'" aria-label="'+esc(t('ko.pw.zeigen'))+'" aria-pressed="false">'+IC.eye+'</button></label>'};
     sheet('<form class="kopw" id="kpwf" novalidate>'+
       '<input class="vh" type="email" name="username" autocomplete="username" value="'+esc((AUTH.user&&AUTH.user.email)||'')+'" tabindex="-1" aria-hidden="true" readonly>'+ /* für Passwort-Manager (Android-Autofill): zu welchem Konto */
+      f('kpw0',t('ko.pw.akt')).replace('autocomplete="new-password"','autocomplete="current-password"').replace('enterkeyhint="done"','enterkeyhint="next"')+ /* Befund 114 */
       f('kpw1',t('ko.pw.neu'))+f('kpw2',t('ko.pw.nochmal'))+'<ul class="pwchk" id="kpwchk" aria-live="polite">'+pwChecks('','')+'</ul>'+
       '<p class="pwerr" id="kpwerr" role="alert" aria-live="assertive"></p>'+
       '<div class="btns"><button class="btn" type="submit" id="kpwgo">'+t('ob.speichern')+'</button><button class="btn ghost" type="button" data-act="close">'+t('ob.abbrechen')+'</button></div></form>',{title:t('ko.pw.btn')});
-    setTimeout(function(){var i=$('#kpw1');if(i)i.focus()},50);return true}
+    setTimeout(function(){var i=$('#kpw0');if(i)i.focus()},50);return true}
   if(a==='koeye'){var pi=$('#'+el.getAttribute('data-for'));if(pi){var on=pi.type==='password',pos=pi.selectionStart;pi.type=on?'text':'password';el.classList.toggle('on',on);el.setAttribute('aria-pressed',String(on));
       try{pi.focus({preventScroll:true});if(pos!=null)pi.setSelectionRange(pos,pos)}catch(e){}}return true} /* Android: Fokus und Cursor bleiben beim Umschalten */
   if(a==='kopwset'){var p1=($('#kpw1')||{}).value||'',p2=($('#kpw2')||{}).value||'',err=$('#kpwerr'),say=function(x){if(err)err.textContent=x;var g=$('#kpw1');if(x&&g&&err)try{err.scrollIntoView({block:'center'})}catch(e){}};
     if(!pwOk(p1)){say(t('ko.pw.regel',{n:PW_MIN}));return true}
     if(p1!==p2){say(t('ko.pw.ungleich'));return true}
+    var p0=($('#kpw0')||{}).value||'';if(!p0){say(t('ko.pw.f.aktfehlt'));return true}
     say('');el.disabled=true;el.classList.add('busy');
-    setPassword(p1).then(function(){closeAll();toast(t('ko.pw.ok'))}).catch(function(e){el.disabled=false;el.classList.remove('busy');say(pwFehler(e))});return true}
+    setPassword(p1,p0).then(function(){closeAll();toast(t('ko.pw.ok'))}).catch(function(e){el.disabled=false;el.classList.remove('busy');say(pwFehler(e))});return true}
   if(a==='kodel'){koDelSheet();return true}
   if(a==='kodelgo'){koDelGo();return true}
   if(a==='koimpno'){KOIMP=null;$('#koprev').innerHTML='';var fi=$('#koimp');if(fi)fi.value='';return true}
@@ -1600,7 +1646,7 @@ document.addEventListener('keydown',function(e){var fig=e.target.closest&&e.targ
 var MELD={png:null,art:'fehler'};
 /* Nur diese Stile kopieren: alle ~400 je Element dauerten auf einer Vorlesungsseite (≈6000 Elemente) 33 s statt 2 s */
 var SNAPSTYLE='display position top right bottom left z-index width height min-width min-height max-width max-height box-sizing margin-top margin-right margin-bottom margin-left padding-top padding-right padding-bottom padding-left flex-direction flex-wrap flex-grow flex-shrink flex-basis align-items align-self align-content justify-content justify-items gap row-gap column-gap grid-template-columns grid-template-rows grid-column-start grid-column-end grid-row-start grid-row-end color background-color background-image background-size background-position background-repeat background-clip -webkit-background-clip -webkit-text-fill-color border-top-width border-right-width border-bottom-width border-left-width border-top-style border-right-style border-bottom-style border-left-style border-top-color border-right-color border-bottom-color border-left-color border-top-left-radius border-top-right-radius border-bottom-left-radius border-bottom-right-radius box-shadow opacity transform transform-origin font-family font-size font-weight font-style font-variant-numeric line-height letter-spacing text-align text-decoration-line text-decoration-color text-transform text-overflow white-space word-break overflow-wrap overflow-x overflow-y visibility vertical-align stroke-dasharray stroke-dashoffset list-style-type object-fit outline-style'.split(' ');
-function meldenBtn(){var b=document.getElementById('meldenbtn'),show=loggedIn()&&!AUTH.recovery&&!/^#\/(impressum|datenschutz)/.test(location.hash||''); /* Befund 76: keine Momentaufnahme mit Name/Anschrift */
+function meldenBtn(){var b=document.getElementById('meldenbtn'),show=loggedIn()&&!AUTH.recovery&&!/^#\/(impressum|datenschutz|nutzungsbedingungen)/.test(location.hash||''); /* Befund 76: keine Momentaufnahme mit Name/Anschrift */
   document.body.classList.toggle('has-melden',show);
   if(!show){if(b)b.remove();return}
   if(!b){b=document.createElement('button');b.id='meldenbtn';b.className='meldenbtn';b.setAttribute('data-act','melden');b.setAttribute('aria-label','Fehler oder Idee melden');
@@ -1624,8 +1670,12 @@ function meldenSheet(){$$('.toast').forEach(function(t){t.remove()});var arts=[[
   setTimeout(function(){var t=document.getElementById('meldtext');if(t)t.focus()},50)}
 function meldenStart(){var b=document.getElementById('meldenbtn');if(b)b.disabled=true;MELD.png=null;toast('Bild der Seite wird erstellt …');
   snapshot().then(function(png){MELD.png=png},function(){MELD.png=null}).then(function(){if(b)b.disabled=false;meldenSheet()})}
+/* Befund 97: Melden schickt nur Gerätetyp + Browserfamilie und eine grobe Breite – nicht den vollen User-Agent, nicht die Fenstergröße */
+function geraetGrob(u,p,tp){u=String(u||'');var typ=/iPad/.test(u)||(p==='MacIntel'&&tp>1)?'iPad':/iPhone|iPod/.test(u)?'iPhone':/Android/.test(u)?(/Mobi/.test(u)?'Android-Handy':'Android-Tablet'):/Windows/.test(u)?'Windows':/Macintosh|Mac OS X/.test(u)?'Mac':/CrOS/.test(u)?'Chromebook':/Linux/.test(u)?'Linux':'anderes Gerät';
+  var br=/Edg(A|iOS)?\//.test(u)?'Edge':/OPR\/|Opera/.test(u)?'Opera':/SamsungBrowser/.test(u)?'Samsung Internet':/Firefox\/|FxiOS/.test(u)?'Firefox':/CriOS|Chrome\//.test(u)?'Chrome':/Safari\//.test(u)?'Safari':'anderer Browser';return typ+' · '+br}
+function breiteGrob(w){return w<700?'schmal (Handy)':w<1100?'mittel (Tablet)':'breit (Laptop/PC)'}
 function meldenSend(){var txt=(($('#meldtext')||{}).value||'').trim(),btn=$('#meldsend');if(txt.length<3){toast('Bitte kurz beschreiben, was los ist.');return}
-  var withImg=MELD.png&&$('#meldbild')&&$('#meldbild').checked,body={art:MELD.art,text:txt,route:location.hash||'#/heute',ua:navigator.userAgent,screen:innerWidth+'x'+innerHeight,
+  var withImg=MELD.png&&$('#meldbild')&&$('#meldbild').checked,body={art:MELD.art,text:txt,route:location.hash||'#/heute',ua:geraetGrob(navigator.userAgent,navigator.platform,navigator.maxTouchPoints),screen:breiteGrob(innerWidth),
     version:((document.querySelector('script[src*="boot.js"]')||{}).src||'').replace(/.*v=/,''),png:withImg?MELD.png:null};
   if(btn){btn.disabled=true;btn.textContent='Wird gesendet …'}
   authReady().then(function(){return fetch(SB_URL+'/functions/v1/feedback',{method:'POST',headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+AUTH.access_token},body:JSON.stringify(body)})})
@@ -1736,7 +1786,6 @@ document.addEventListener('click',function(e){
   if(a==='eigene'){eigeneSheet();return}
   if(a==='eigenedel'){var idd=t.getAttribute('data-id');if(S.eigene&&S.eigene[idd]){delete S.eigene[idd];delete S.done[idd];EV=null;save();toast('Gelöscht.');rerender()}return}
   if(a==='setname'){var v=(($('#nm')||{}).value||'').trim().slice(0,30);if(v){S.name=v;save();rerender()}return}
-  if(a==='terms'){sheet('<div class="story"><h2>Nutzungsbedingungen</h2><p class="small muted">Stand: 23.10.2026</p><h3 class="sh">1. Angebot</h3><div class="sp">Diese Lern-App ist ein kostenloses, privates Angebot (Betreiber: GitHub-Nutzer swiedzaid-star) für Studierende. Sie ist kein Angebot der RWTH Aachen. Es besteht kein Anspruch auf Verfügbarkeit oder bestimmte Funktionen; die App kann jederzeit geändert oder eingestellt werden.</div><h3 class="sh">2. Keine Gewähr</h3><div class="sp">Inhalte, Termine, Lernpläne und Klausur-Einschätzungen werden sorgfältig erstellt, sind aber ohne Gewähr. Verbindlich sind ausschließlich die Angaben der Hochschule (RWTHonline, Moodle, Lehrstühle). Einschätzungen zu Prüfungen sind Prognosen, keine Zusagen.</div><h3 class="sh">3. Urheberrecht</h3><div class="sp">Texte, Aufgaben, Lösungswege, Grafiken, das Design und das Maskottchen sind urheberrechtlich geschützt. Alle Rechte vorbehalten. Erlaubt ist die Nutzung zum eigenen Lernen. Nicht erlaubt ist ohne schriftliche Zustimmung: Inhalte kopieren, veröffentlichen, weitergeben, verkaufen, automatisiert auslesen (Scraping) oder in andere Apps, Websites oder KI-Trainingsdaten übernehmen.</div><h3 class="sh">4. Haftung</h3><div class="sp">Da die App unentgeltlich ist, haftet der Betreiber nur für Vorsatz und grobe Fahrlässigkeit sowie bei Verletzung von Leben, Körper oder Gesundheit. Für Datenverlust (z. B. durch Löschen der Browserdaten) wird nicht gehaftet; nutze bei Bedarf den Sync oder „Fortschritt kopieren“.</div><h3 class="sh">5. Schlussbestimmungen</h3><div class="sp">Es gilt deutsches Recht. Sollte eine Bestimmung unwirksam sein, bleiben die übrigen wirksam.</div></div>',{title:'Nutzungsbedingungen'});return}
   if(a==='close'){closeAll();rerender();return}
   if(a==='sessdone'){var pp=S.plans[t.getAttribute('data-x')];if(pp){pp.done[t.getAttribute('data-s')]=true;activity(10);save()}closeAll();toast('Abgehakt. Stark!');rerender();return}
   if(a==='install'){if(INSTALL){INSTALL.prompt();INSTALL.userChoice.then(function(){INSTALL=null;rerender()})}return}
@@ -1778,6 +1827,20 @@ document.addEventListener('click',function(e){
   if(a==='eye'){var pi=$('#lpw');if(pi){pi.type=pi.type==='password'?'text':'password';t.classList.toggle('on',pi.type==='text')}return}
   if(a==='login'){var em=($('#lmail').value||'').trim(),pw=$('#lpw').value||'';if(!em||!pw){var le=$('#lerr');if(le)le.textContent='E-Mail und Passwort eingeben.';return}t.disabled=true;t.classList.add('busy');login(em,pw).then(function(){toast('Willkommen!');rerender();syncNow(false)}).catch(function(e){t.disabled=false;t.classList.remove('busy');var el=$('#lerr');if(el)el.textContent=/invalid/i.test(e.message)?'E-Mail oder Passwort stimmt nicht.':'Anmeldung fehlgeschlagen: '+e.message});return}
   if(a==='forgot'){var em2=($('#lmail').value||'').trim();if(!em2){toast('Erst die E-Mail eintragen.');return}try{localStorage.setItem('studium-recover',em2)}catch(e){}recover(em2).then(function(){toast('Falls ein Konto existiert, kommt gleich eine E-Mail.')}).catch(function(e){toast('Fehler: '+e.message)});return}
+  if(a==='regrecht'){e.preventDefault();var rk=t.getAttribute('data-k');sheet('<div class="card recht">'+String((D.recht||{})[rk]||'').replace(/\{SUPPORT\}/g,supportMail())+'</div>',{title:t0('recht.'+rk)});return} /* Befund 90: Formular bleibt, Eingaben bleiben */
+  if(a==='regform'){LGMODE='reg';rerender();setTimeout(function(){var i=$('#rmail');if(i)i.focus()},50);return}
+  if(a==='regback'){LGMODE='login';rerender();return}
+  if(a==='regeye'){var pe=$('#'+t.getAttribute('data-for'));if(pe){pe.type=pe.type==='password'?'text':'password';t.classList.toggle('on',pe.type==='text')}return}
+  if(a==='regsend'){var rm=(($('#rmail')||{}).value||'').trim(),r1=($('#rpw1')||{}).value||'',r2=($('#rpw2')||{}).value||'',er=$('#lerr'),say=function(x){if(er)er.textContent=x};
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(rm)){say(t0('reg.err.mail'));return}
+    if(!pwRegel(r1)){say(t0('ko.pw.regel',{n:PW_MIN}));return}if(r1!==r2){say(t0('ko.pw.ungleich'));return}
+    if(!($('#rds')||{}).checked){say(t0('reg.err.ds'));return}
+    t.disabled=true;t.classList.add('busy');try{localStorage.setItem('studium-recover',rm)}catch(e){}
+    signup(rm,r1).then(function(){LGMAIL=rm;LGMODE='regok';rerender()},function(e){t.disabled=false;t.classList.remove('busy');say(regFehler(e))});return}
+  if(a==='signupok'){var sm=(($('#pwmail')||{}).value||'').trim().toLowerCase(),sa=((AUTH.user&&AUTH.user.email)||'').toLowerCase();
+    if(!sm){toast(t0('reg.best.leer'));return}
+    if(!sa||sm!==sa){logout();toast(t0('reg.best.fremd'));rerender();return}
+    AUTH.recovery=false;authSave();toast(t0('reg.best.ok'));rerender();syncNow(true);return}
   if(a==='pwset'){var cm=(($('#pwmail')||{}).value||'').trim().toLowerCase(),acct=((AUTH.user&&AUTH.user.email)||'').toLowerCase();
     if(!cm){toast('Bitte deine E-Mail zur Bestätigung eintragen.');return}
     if(!acct||cm!==acct){logout();toast('Dieser Link gehört nicht zu deinem Konto.');rerender();return}} /* Befund 6b: fremder Link → Sitzung verwerfen */
@@ -1790,6 +1853,9 @@ document.addEventListener('click',function(e){
   if(a==='meldart'){MELD.art=t.getAttribute('data-a');$$('[data-act=meldart]',layer).forEach(function(x){var on=x===t;x.classList.toggle('on',on);x.setAttribute('aria-checked',on)});return}
   if(a==='meldsend'){meldenSend();return}
   if(a==='testerok'){S.ui.testerOk=Date.now();save();rerender();return}
+  if(a==='umzspaeter'){umzLs(UMZ_SP,Date.now());rerender();return}
+  if(a==='umzsync'){if(!navigator.onLine){toast(t0('umz.offline'));return}var z0=Date.now();
+    syncNow(false).then(function(){if(!SY.err&&SY.last&&SY.last>=z0-1000){UMZ.ok=Date.now();umzLs(UMZ_OK,UMZ.ok)}else toast(SY.err?'Problem: '+SY.err:t0('umz.fehl'));rerender()});return}
   if(a==='syncnow'){syncNow(false).then(function(){toast(SY.err?'Problem: '+SY.err:'Synchronisiert.')});return}
   if(a==='logout'){logout();toast('Abgemeldet.');rerender();return}
   if(a==='nach'){runNach(t.getAttribute('data-l'));return}
@@ -1850,7 +1916,7 @@ function loggedIn(){return !!(AUTH.access_token&&AUTH.user)}
 /* Befund 38: Solange ein Passwort-/Einladungslink offen ist (AUTH.recovery), nie synchronisieren – sonst landet der lokale Stand in einem fremden Konto. */
 function syncAllowed(){return loggedIn()&&!AUTH.recovery}
 function sbFetch(path,opt,noAuth){opt=opt||{};opt.headers=Object.assign({'apikey':SB_KEY,'Content-Type':'application/json'},opt.headers||{});if(!noAuth&&AUTH.access_token)opt.headers['Authorization']='Bearer '+AUTH.access_token;
-  return fetch(SB_URL+path,opt).then(function(r){return r.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null}catch(e){}if(!r.ok){var e=new Error((j&&(j.msg||j.message||j.error_description||j.error))||('Fehler '+r.status));e.status=r.status;throw e}return j})})}
+  return fetch(SB_URL+path,opt).then(function(r){return r.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null}catch(e){}if(!r.ok){var e=new Error((j&&(j.msg||j.message||j.error_description||j.error))||('Fehler '+r.status));e.status=r.status;e.code=(j&&j.error_code)||'';throw e}return j})})} /* e.code = Fehlercode des Servers (z. B. current_password_invalid) */
 /* Anmeldung aus localStorage neu lesen: ein anderer Tab kann den Refresh-Token schon erneuert haben (Rotation). */
 function authReload(){try{var a=JSON.parse(localStorage.getItem(AUTHKEY)||'{}');if(a&&a.access_token)AUTH=a}catch(e){}}
 window.addEventListener('storage',function(ev){if(ev.key===AUTHKEY){var a={};try{a=JSON.parse(ev.newValue||'{}')||{}}catch(e){}
@@ -1870,17 +1936,19 @@ function login(email,pw){return sbFetch('/auth/v1/token?grant_type=password',{me
 function logout(){var t=AUTH.access_token;AUTH={};authSave();SY={};sySave();if(t)sbFetch('/auth/v1/logout',{method:'POST',headers:{'Authorization':'Bearer '+t}},true).catch(function(){})}
 function appUrl(){return location.origin+location.pathname.replace(/index\.html$/,'')}
 function recover(email){return sbFetch('/auth/v1/recover?redirect_to='+encodeURIComponent(appUrl()),{method:'POST',body:JSON.stringify({email:email})},true)}
-function setPassword(pw){return authReady().then(function(){return sbAuthed('/auth/v1/user',{method:'PUT',body:JSON.stringify({password:pw})})})}
+/* Befund 114: Im Projekt verlangt der Server beim Ändern das aktuelle Passwort (current_password). Ausgenommen sind die
+   Recovery-Sitzung („Passwort vergessen“) und Konten ohne Passwort (Einladung) – dort wird cur nicht mitgeschickt. */
+function setPassword(pw,cur){var b={password:pw};if(cur)b.current_password=cur;return authReady().then(function(){return sbAuthed('/auth/v1/user',{method:'PUT',body:JSON.stringify(b)})})}
 /* Rückkehr vom „Passwort vergessen“-Link. Zwei Formen: #token_hash=…&type=recovery (sicher gegen Mail-Scanner, die App bestätigt den
    Link selbst) oder #access_token=…&type=recovery (Standardvorlage von Supabase). */
-(function(){var h=location.hash||'';if(!/type=recovery|type=invite|token_hash=|access_token=|error_description=/.test(h))return;var q={};h.replace(/^#\/?/,'').split('&').forEach(function(kv){var i=kv.indexOf('=');if(i>0){try{q[decodeURIComponent(kv.slice(0,i))]=decodeURIComponent(kv.slice(i+1))}catch(e){}}});
+(function(){var h=location.hash||'';if(!/type=recovery|type=invite|type=signup|type=email|token_hash=|access_token=|error_description=/.test(h))return;var q={};h.replace(/^#\/?/,'').split('&').forEach(function(kv){var i=kv.indexOf('=');if(i>0){try{q[decodeURIComponent(kv.slice(0,i))]=decodeURIComponent(kv.slice(i+1))}catch(e){}}});
   history.replaceState(null,'',location.pathname+'#/studium'); /* Token sofort aus der Adresszeile (Verlauf, Screenshots) */
   var bad=function(){setTimeout(function(){toast('Der Link ist ungültig oder abgelaufen. Bitte neu anfordern.')},800)};
   var expect='';try{expect=localStorage.getItem('studium-recover')||''}catch(e){}
   function take(j){var u=j.user;if(!u||!u.email||(expect&&u.email.toLowerCase()!==expect.toLowerCase()))return bad();
-    AUTH={access_token:j.access_token,refresh_token:j.refresh_token,exp:j.expires_at?j.expires_at*1000:Date.now()+(+j.expires_in||3600)*1000,user:u,recovery:vtype==='invite'?'invite':true};authSave();try{localStorage.removeItem('studium-recover')}catch(e){}rerender()}
-  var vtype=q.type==='invite'?'invite':'recovery'; /* Einladung (Konto vom Inhaber angelegt) läuft wie „Passwort vergessen“ */
-  if(q.type!=='recovery'&&q.type!=='invite'&&!q.error_description)return bad();
+    AUTH={access_token:j.access_token,refresh_token:j.refresh_token,exp:j.expires_at?j.expires_at*1000:Date.now()+(+j.expires_in||3600)*1000,user:u,recovery:vtype==='invite'?'invite':vtype==='signup'?'signup':true};authSave();try{localStorage.removeItem('studium-recover')}catch(e){}rerender()}
+  var vtype=q.type==='invite'?'invite':(q.type==='signup'||q.type==='email')?'signup':'recovery'; /* Einladung läuft wie „Passwort vergessen“; Registrierung (E3): nur E-Mail bestätigen */
+  if(q.type!=='recovery'&&q.type!=='invite'&&q.type!=='signup'&&q.type!=='email'&&!q.error_description)return bad();
   if(q.token_hash){ /* sicherer Weg: der Server bestätigt den Link und liefert Nutzer + Sitzung */
     sbFetch('/auth/v1/verify',{method:'POST',body:JSON.stringify({type:vtype,token_hash:q.token_hash})},true).then(take).catch(bad)}
   else if(q.access_token){ /* Standardvorlage: Token nur annehmen, wenn der Server ihn als Nutzer dieses Projekts bestätigt */
@@ -1907,31 +1975,76 @@ function syncNow(quiet){if(!syncAllowed()||syBusy||!navigator.onLine)return Prom
       else if(R&&!R._v){var M2=mergeByTs(S,Object.assign({},R,{_ts:{}}));applyRemote(M2);push=true}
       else push=true;
       SY.last=Date.now();SY.err=null;sySave();
+      if(push&&new Blob([JSON.stringify(S)]).size>SYNC_MAX){var ge=new Error(t('sync.zugross'));ge.status=413;throw ge} /* E3: wie die Datenbank-Regel (2 MB je Konto) */
       if(push)return sbAuthed('/rest/v1/progress',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({user_id:uid,data:S,updated_at:new Date().toISOString()})})})
-  .catch(function(e){if(!loggedIn()){SY.err=SY.err||'Anmeldung abgelaufen, bitte neu anmelden'}else SY.err=(e&&e.status===401)?'Anmeldung abgelaufen, bitte neu anmelden':(e&&/Failed to fetch|NetworkError/.test(String(e.message)))?'kein Internet oder Server nicht erreichbar':String(e.message||e);if(e&&e.status===401&&loggedIn())authDrop();sySave()})
+  .catch(function(e){if(!loggedIn()){SY.err=SY.err||'Anmeldung abgelaufen, bitte neu anmelden'}else SY.err=(e&&e.status===401)?'Anmeldung abgelaufen, bitte neu anmelden':(e&&/Failed to fetch|NetworkError/.test(String(e.message)))?'kein Internet oder Server nicht erreichbar':(e&&(e.status===403||/42501|row-level security/i.test(String(e.message))))?t('sync.recht'):String(e.message||e);if(e&&e.status===401&&loggedIn())authDrop();sySave()})
   .then(function(){syBusy=false;var el=$('#systat');if(el)el.innerHTML=syStatus();checkHandoff()})}
 /* Rolle aus public.profiles (owner|tester, docs/tester-einrichtung.md). Fehlt die Tabelle noch (vor dem SQL), läuft alles wie bisher.
    Konto ohne Profil: kein Sync, klare Meldung (RLS würde ohnehin ablehnen). */
 function roleFetch(){var uid=AUTH.user&&AUTH.user.id;return sbAuthed('/rest/v1/profiles?select=role&user_id=eq.'+uid).then(function(rows){
-    var r=rows&&rows[0]&&rows[0].role;if(SY.role!==r){SY.role=r||'';sySave();if(layer.hidden&&/^#\/heute|^$/.test(location.hash))rerender()}
+    var r=rows&&rows[0]&&rows[0].role,w=r?0:1;if(SY.role!==(r||'')||!!SY.wartet!==!!w){SY.role=r||'';SY.wartet=w;sySave();if(layer.hidden&&/^#\/(heute|konto)|^$/.test(location.hash))rerender()}
+    if(r==='owner')setTimeout(anfLaden,0); /* Zähler „Anfragen“ für den Inhaber */
     /* XP nach dem Sync-Fehler vom 26.10. zurück (Level 6 = 1060 XP). Geprüft wird der XP-Stand selbst, nicht nur ein Merker:
        ein Gerät mit altem app.js konnte xpfix1 übernehmen, aber seinen niedrigeren XP-Stand behalten und zurückschicken. */
     if(r==='owner'&&!S.ui.xpfix2&&(S.xp||0)<1060){S.xp=1060;S.ui.xpfix2=1;toast('Level 6 wiederhergestellt.');save()}
-    if(!r){var e=new Error('Dein Konto ist noch nicht freigeschaltet. Bitte melde dich beim Inhaber der App.');e.status=403;throw e}},
+    if(!r){var e=new Error(t('warte.kurz'));e.status=403;throw e}},
   function(e){if(e&&(e.status===404||/PGRST205|42P01|does not exist|schema cache/i.test(String(e.message))))return; /* Tabelle noch nicht angelegt */throw e})}
+function umzug(){var x=window.__umzug;if(x==='bald'||x==='alt'||x==='neu')return x;if(!UMZUG.an||location.protocol==='file:'||/^(localhost|127\.)/.test(location.hostname))return '';
+  return UMZUG.neuHost.test(location.hostname)?(UMZUG.live?'neu':''):(UMZUG.live?'alt':'bald')}
+/* Chef #91 b: Auf Heute hat die Ankündigung ein „Später“-Kreuz (das Gerät merkt sich das einen Tag) und schrumpft nach
+   „Jetzt synchronisieren“ zu einer schmalen Zeile – so bleibt „Nachbereiten“ auf dem ersten Bildschirm. Im Konto steht immer die volle Karte. */
+function umzLs(k,v){try{if(v===undefined)return +localStorage.getItem(k)||0;localStorage.setItem(k,String(v))}catch(e){return 0}}
+function umzugCard(ort){var u=umzug();if((u!=='bald'&&u!=='alt')||!loggedIn())return '';var ok=(UMZ.ok||umzLs(UMZ_OK))&&!SY.err,heute=ort==='heute'&&u==='bald',link='<a class="btn sm'+(ok?'':' ghost')+'" href="'+esc(UMZUG.neu)+'">'+t('umz.weiter')+'</a>';
+  if(heute&&ok)return ''; /* steht dann als Zeile im Kopf (umzZeile) */
+  if(heute&&Date.now()-umzLs(UMZ_SP)<864e5)return '';
+  return '<div class="card warte umzug">'+(heute?'<button class="x" data-act="umzspaeter" aria-label="'+esc(t('umz.spaeter'))+'">'+IC.x+'</button>':'')+'<b>'+(u==='alt'?t('umz.titel'):t(UMZUG.datum?'umz.bald.titel.d':'umz.bald.titel',{d:esc(UMZUG.datum)}))+'</b>'+
+    '<p class="small" style="margin:6px 0 8px">'+t(ok?(u==='alt'?'umz.ok':'umz.bald.ok'):(u==='alt'?'umz.text':'umz.bald.text'))+'</p><p class="small muted" style="margin:0 0 8px">'+t('umz.install')+'</p>'+
+    '<div class="btns" style="margin-top:0">'+(ok?'':'<button class="btn sm" data-act="umzsync">'+t('umz.sync')+'</button>')+(u==='alt'?link:'')+'</div></div>'}
+/* gesichert: eine Zeile im Kopf an Stelle des Eichhörnchen-Spruchs – gleiche Höhe, „Nachbereiten“ bleibt auf dem ersten Bildschirm */
+function umzZeile(){return umzug()==='bald'&&loggedIn()&&(UMZ.ok||umzLs(UMZ_OK))&&!SY.err?'<div class="sqline umzline">'+IC.check+'<span>'+t('umz.zeile',{d:esc(UMZUG.kurz||UMZUG.datum)})+'</span></div>':''}
+function umzugLogin(){var u=umzug();if(u==='neu')return '<p class="lg-umz">'+t('umz.login.neu')+'</p>';
+  if(u==='alt')return '<p class="lg-umz">'+t('umz.login.alt')+' <a href="'+esc(UMZUG.neu)+'">skuro.app</a></p>';return ''}
+function warteCard(){if(!SY.wartet||!loggedIn())return '';return '<div class="card warte"><b>'+t('warte.kurz')+'</b><p class="small" style="margin:6px 0 0">'+t('warte.text')+'</p></div>'}
 function testerCard(){if(SY.role!=='tester'||S.ui.testerOk)return '';
   return '<div class="card tester" style="margin-top:12px"><b>Du bist Tester</b><p class="small" style="margin:6px 0">Du nutzt eine frühe Version der App. Wenn dir ein Fehler auffällt, du eine Idee hast oder dir etwas nicht gefällt: tippe unten rechts auf <b>Melden</b>. Die Meldung geht mit einem Bild der Seite direkt an den Entwickler.</p><p class="small muted" style="margin:0 0 8px">Dein Lernstand wird nur für dein Konto gespeichert und zwischen deinen Geräten abgeglichen.</p><button class="btn sm" data-act="testerok">Verstanden</button></div>'}
 function syLater(){if(!syncAllowed())return;clearTimeout(syTimer);syTimer=setTimeout(function(){syncNow(true)},4000)}
 function syStatus(){if(!loggedIn())return 'Nicht angemeldet';if(SY.err)return '<span class="badc">Problem: '+esc(SY.err)+'</span>';if(!SY.last)return 'Angemeldet, noch nicht synchronisiert';var d=new Date(SY.last);return '<span class="okc">Synchron</span> · zuletzt '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' Uhr'}
 function syncCard(){var u=AUTH.user||{};return '<div class="card"><b>Konto und Geräte-Sync</b><p class="small" style="margin:6px 0">Angemeldet als <b class="nosnap">'+esc(u.email||'')+'</b></p><p class="small" id="systat" style="margin:6px 0">'+syStatus()+'</p><p class="small muted">Fortschritt, Pläne und Einstellungen gleichen sich automatisch ab: beim Öffnen, alle 2 Minuten und kurz nach jeder Änderung. Ohne Internet läuft alles weiter und wird später nachgetragen.</p><div class="btns"><button class="btn sm" data-act="syncnow">Jetzt synchronisieren</button><button class="btn sm ghost" data-act="pwchange">Passwort ändern</button><button class="btn sm ghost" data-act="logout">Abmelden</button></div></div>'}
+/* ===== Registrierung (E3 Fassung 2, Inhaber 04.11.: gebaut, aber AUS) =====
+   REGISTRIERUNG_AN schaltet den Knopf „Konto erstellen“ frei (Tests: window.__registrierungAn). Wer sich registrieren darf,
+   steht in der Freigabeliste public.zugaenge (pflegt der Inhaber auf der Konto-Seite → Zugänge); die Datenbank prüft das. */
+function regAn(){return REGISTRIERUNG_AN||window.__registrierungAn===1}
+function pwRegel(p){return pwOk(p)} /* PW_MIN (Inhaber 05.11.) */
+function lgEye(id){return '<button type="button" class="lg-eye" data-act="regeye" data-for="'+id+'" aria-label="'+esc(t('ko.pw.zeigen'))+'">'+IC.eye+'</button>'}
+function lgReg(){if(LGMODE==='regok')return '<h2>'+t('reg.ok.title')+'</h2><p>'+t('reg.ok.text',{mail:'<b class="nosnap">'+esc(LGMAIL)+'</b>'})+'</p><p class="small muted">'+t('reg.ok.hinweis')+'</p><button class="btn lg-go" data-act="regback">'+t('reg.zur.anmeldung')+' '+IC.chev+'</button>';
+  return '<h2>'+t('reg.title')+'</h2><p class="small muted">'+t('reg.sub')+'</p>'+
+    '<label class="lg-f"><input id="rmail" type="email" placeholder=" " autocomplete="email" inputmode="email" spellcheck="false" value="'+esc(LGMAIL)+'"><span>'+t('reg.mail')+'</span></label>'+
+    '<label class="lg-f"><input id="rpw1" type="password" placeholder=" " autocomplete="new-password"><span>'+t('ko.pw.neu')+'</span>'+lgEye('rpw1')+'</label>'+
+    '<label class="lg-f"><input id="rpw2" type="password" placeholder=" " autocomplete="new-password"><span>'+t('ko.pw.nochmal')+'</span>'+lgEye('rpw2')+'</label>'+
+    '<p class="small lg-regel">'+t('ko.pw.regel',{n:PW_MIN})+'</p>'+
+    '<label class="lg-ck"><input type="checkbox" id="rds"> <span>'+t('reg.ds',{ds:'<a class="lg-link" href="#/datenschutz" data-act="regrecht" data-k="datenschutz">'+t('ko.datenschutz')+'</a>',nb:'<a class="lg-link" href="#/nutzungsbedingungen" data-act="regrecht" data-k="nutzungsbedingungen">'+t('recht.nutzungsbedingungen')+'</a>'})+'</span></label>'+
+    '<button class="btn lg-go" data-act="regsend">'+t('reg.senden')+' '+IC.chev+'</button><button class="lg-link" data-act="regback">'+t('reg.schon')+'</button>'}
+document.addEventListener('input',function(e){if(e.target&&e.target.id==='rmail')LGMAIL=e.target.value}); /* Befund 90: E-Mail bleibt beim Zurückkommen */
+function signup(email,pw){return sbFetch('/auth/v1/signup?redirect_to='+encodeURIComponent(appUrl()),{method:'POST',body:JSON.stringify({email:email,password:pw})},true)}
+function regFehler(e){var m=String(e&&e.message||e),st=e&&e.status;
+  if(/signup.?disabled|Signups not allowed/i.test(m))return t('reg.err.zu');
+  if(/already|registered|exists/i.test(m))return t('reg.err.vergeben');
+  if(/nicht freigeschaltet/i.test(m)||(st===403&&!/database/i.test(m)))return t('reg.err.frei'); /* Befund 91: nur die Hook-Meldung; ein Server-Fehler 500 ist kein „nicht freigeschaltet“ */
+  if(st===429||/rate|limit|too many/i.test(m))return t('reg.err.limit');
+  if(/password|weak/i.test(m))return t('ko.pw.regel',{n:PW_MIN});
+  return t('reg.err.allg')}
 function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;var sm=D.mods.filter(function(m){return sichtbar(m.id)});sm.forEach(function(m){var c=m._counts||{};nT+=c.tasks||(m.tasks||[]).length;nF+=c.formulas||(m.formulas||[]).length});var nM=sm.filter(function(m){return m.id!=='spa'&&m.id!=='studium'}).length; /* versteckte Fächer zählen nicht mit */
   return '<div class="lg"><div class="lg-sky" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="lg-in">'+
-  '<section class="lg-hero"><div class="lg-mark">'+SQSVG+'</div><p class="lg-kick">WiIng Bau · RWTH Aachen · WS 26/27</p><h1>Dein Semester.<br><span>Ein Plan.</span></h1>'+
-  '<p class="lg-sub">Vorlesungen als Lerntexte, eigene Aufgaben mit Lösungsweg, Fristen und Lernpläne – auf jedem Gerät derselbe Stand.</p>'+
-  '<p class="lg-by"><b>Von RWTH-Studenten für RWTH-Studenten.</b><span>Gerade: Wirtschaftsingenieurwesen Bau, 1. Semester – weitere Studiengänge folgen.</span></p>'+
+  /* #87 (Inhaber 13.11.): bisheriger Aufbau der Startseite, Skuro nur als kleines Wortzeichen neben dem Eichhörnchen */
+  '<section class="lg-hero"><div class="lg-brand"><div class="lg-mark">'+SQSVG+'</div><span class="lg-wm">Skuro</span></div><p class="lg-kick">'+t('land.kick')+'</p><h1>'+t('land.h1a')+'<br><span>'+t('land.h1b')+'</span></h1>'+
+  '<p class="lg-sub">'+t('land.sub')+'</p>'+
+  '<p class="lg-by"><b>'+t('land.von')+'</b><span>'+t('land.gerade')+'</span></p>'+
   '<ul class="lg-stats"><li><b>'+nM+'</b><span>Fächer</span></li><li><b>'+nT+'</b><span>Aufgaben</span></li><li><b>'+nF+'</b><span>Formeln</span></li><li><b>∞</b><span>Zufallszahlen</span></li></ul></section>'+
-  '<section class="lg-card" aria-label="'+(rec?'Neues Passwort setzen':'Anmelden')+'">'+
-  (rec?'<h2>'+(rec==='invite'?'Passwort festlegen':'Neues Passwort')+'</h2><p class="small muted">Für das Konto <b id="pwacct" class="nosnap">'+esc((AUTH.user&&AUTH.user.email)||'')+'</b>. '+t('ko.pw.regel',{n:PW_MIN})+'</p>'+
+  '<section class="lg-card" aria-label="'+(rec?'Neues Passwort setzen':'Anmelden')+'">'+umzugLogin()+
+  (rec==='signup'?'<h2>'+t('reg.best.title')+'</h2><p class="small muted">'+t('reg.best.sub',{mail:'<b id="pwacct" class="nosnap">'+esc((AUTH.user&&AUTH.user.email)||'')+'</b>'})+'</p>'+
+     '<label class="lg-f"><input id="pwmail" type="email" placeholder=" " autocomplete="email" required><span>'+t('reg.best.mail')+'</span></label><button class="btn lg-go" data-act="signupok">'+t('ob.los')+' '+IC.chev+'</button>'
+   :!rec&&regAn()&&LGMODE!=='login'?lgReg():
+   rec?'<h2>'+(rec==='invite'?'Passwort festlegen':'Neues Passwort')+'</h2><p class="small muted">Für das Konto <b id="pwacct" class="nosnap">'+esc((AUTH.user&&AUTH.user.email)||'')+'</b>. '+t('ko.pw.regel',{n:PW_MIN})+'</p>'+
      '<label class="lg-f"><input id="pwmail" type="email" placeholder=" " autocomplete="email" required><span>Deine E-Mail zur Bestätigung</span></label>'+
      '<label class="lg-f"><input id="pw1" type="password" placeholder=" " autocomplete="new-password"><span>Neues Passwort</span></label>'+
      '<label class="lg-f"><input id="pw2" type="password" placeholder=" " autocomplete="new-password"><span>Noch einmal</span></label>'+
@@ -1939,8 +2052,8 @@ function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;var sm=D.mod
    :'<h2>Willkommen zurück</h2><p class="small muted">Melde dich an, dann geht es da weiter, wo du aufgehört hast.</p>'+
      '<label class="lg-f"><input id="lmail" type="email" placeholder=" " autocomplete="username" inputmode="email" spellcheck="false"><span>E-Mail</span></label>'+
      '<label class="lg-f"><input id="lpw" type="password" placeholder=" " autocomplete="current-password"><span>Passwort</span><button type="button" class="lg-eye" data-act="eye" aria-label="Passwort anzeigen">'+IC.eye+'</button></label>'+
-     '<p class="lg-caps" id="lcaps">Feststelltaste ist aktiv.</p><button class="btn lg-go" data-act="login">Anmelden '+IC.chev+'</button><button class="lg-link" data-act="forgot">Passwort vergessen?</button>')+
-  '<p class="small badc" id="lerr" role="alert"></p><p class="lg-foot">Privat. Keine Registrierung. Daten in der EU. <a class="lg-link" href="#/datenschutz">'+t('ko.datenschutz')+'</a> · <a class="lg-link" href="#/impressum">'+t('recht.impressum')+'</a><br>'+t('recht.hilfe')+' '+supportMail()+'</p></section></div></div>'}
+     '<p class="lg-caps" id="lcaps">Feststelltaste ist aktiv.</p><button class="btn lg-go" data-act="login">Anmelden '+IC.chev+'</button><button class="lg-link" data-act="forgot">Passwort vergessen?</button>'+(regAn()?'<div class="lg-neu"><span>'+t('reg.neu')+'</span><button class="btn lg-ghost" data-act="regform">'+t('reg.title')+'</button></div>':''))+
+  '<p class="small badc" id="lerr" role="alert"></p><p class="lg-foot">'+t('land.rwth')+'<br>'+(regAn()?t('reg.foot'):'Privat. Keine Registrierung.')+' Daten in der EU. <a class="lg-link" href="#/datenschutz">'+t('ko.datenschutz')+'</a> · <a class="lg-link" href="#/nutzungsbedingungen">'+t('recht.nutzungsbedingungen')+'</a> · <a class="lg-link" href="#/impressum">'+t('recht.impressum')+'</a><br>'+t('recht.hilfe')+' '+supportMail()+'</p></section></div></div>'}
 document.addEventListener('keyup',function(e){var c=document.getElementById('lcaps');if(c&&e.getModifierState&&document.activeElement&&document.activeElement.id==='lpw')c.classList.toggle('on',e.getModifierState('CapsLock'))});
 setTimeout(idleF,1200);
 setTimeout(function(){syncNow(true)},1500);setInterval(function(){if(!document.hidden)syncNow(true)},120000);
