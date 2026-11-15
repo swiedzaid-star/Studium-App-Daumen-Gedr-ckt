@@ -1235,6 +1235,8 @@ function nzObj(o){return !!o&&typeof o==='object'&&!Array.isArray(o)}
 function nutzLvl(xp){var l=1,need=100;xp=+xp||0;while(xp>=need){xp-=need;l++;need=100+l*40}return l}
 function nutzModOf(id){return (TASK[id]&&TASK[id].mod)||String(id).split('-')[0]}
 function nutzAuswerten(rows,profs,konten,heute){var rolle={},kt={},i;(profs||[]).forEach(function(p){rolle[p.user_id]=p.role});(konten||[]).forEach(function(k){kt[k.user_id]=k});
+  /* Chef #112 (Inhaber 15.11.): Inhaber (owner) und Prüf-Konten (pruefer) fehlen ÜBERALL – vor jeder Zählung herausfiltern (Summen, Liste, Fächer/Themen, CSV) */
+  var nzAus=function(id){var r=rolle[id];return r==='owner'||r==='pruefer'};rows=(rows||[]).filter(function(r){return !nzAus(r.user_id)});profs=(profs||[]).filter(function(p){return !nzAus(p.user_id)});
   var tage14=[];for(i=13;i>=0;i--)tage14.push(ymd(addDays(heute,-i)));var t0=new Date(heute.getFullYear(),heute.getMonth(),heute.getDate()).getTime();
   var nutzer=(rows||[]).map(function(r){var days=nzObj(r.days)?r.days:{},tasks=nzObj(r.tasks)?r.tasks:{},hp=nzObj(r.haeppchen)?r.haeppchen:{};
     var dk=Object.keys(days).filter(function(k){return +days[k]>0}),tk=Object.keys(tasks),last=Math.max(Date.parse(r.updated_at)||0,(nzObj(r.last)&&+r.last.t)||0);
@@ -1314,7 +1316,7 @@ function vKonto(){var u=AUTH.user||{},L=lern(),ch=chosen()||[],th=S.theme||'auto
   if(role==='owner')h+='<section class="sec"><h2>'+t('anf.title')+(Array.isArray(ANF)&&ANF.length?' <span class="chip warn">'+ANF.length+'</span>':'')+'</h2><div class="card kocard">'+koAnfragen()+'</div></section>';
   if(role==='owner')h+=koSec('zug.title',koZugaenge());
   if(role==='owner')h+=koSec('nutz.title',koRow(t('nutz.kurz'),'<a class="btn sm" href="#/nutzung" data-nz="1">'+t('nutz.oeffnen')+'</a>',t('nutz.sub'))); /* #107 */
-  h+=koSec('ko.rolle',koRow(t('ko.rolle.du'),'<span class="chip '+(role?'acc':'')+'">'+t(role==='owner'?'ko.rolle.owner':role==='tester'?'ko.rolle.tester':SY.wartet?'ko.rolle.wartet':'ko.rolle.keine')+'</span>'));
+  h+=koSec('ko.rolle',koRow(t('ko.rolle.du'),'<span class="chip '+(role?'acc':'')+'">'+t(role==='owner'?'ko.rolle.owner':(role==='tester'||role==='pruefer')?'ko.rolle.tester':SY.wartet?'ko.rolle.wartet':'ko.rolle.keine')+'</span>'));
   h+=koSec('ko.recht','<div class="btns" style="margin-top:0"><a class="btn sm ghost" href="#/impressum">'+t('recht.impressum')+'</a><a class="btn sm ghost" href="#/datenschutz">'+t('ko.datenschutz')+'</a><a class="btn sm ghost" href="#/nutzungsbedingungen">'+t('ko.nutzung')+'</a></div>'+
     '<details class="kolic"><summary>'+t('ko.lizenzen')+'</summary><ul class="small"><li>Plus Jakarta Sans, JetBrains Mono – SIL Open Font License 1.1 (site/vendor/fonts)</li><li>MathJax – Apache License 2.0 (site/vendor/mathjax)</li><li>html-to-image – MIT License (site/vendor/html-to-image)</li></ul><p class="small muted">'+t('ko.lizenzen.sub')+'</p></details>'+
     '<p class="small muted" style="margin:8px 0 0">Skuro · © 2026 swiedzaid-star</p>');
@@ -2104,7 +2106,7 @@ function umzZeile(){return umzug()==='bald'&&loggedIn()&&(UMZ.ok||umzLs(UMZ_OK))
 function umzugLogin(){var u=umzug();if(u==='neu')return '<p class="lg-umz">'+t('umz.login.neu')+'</p>';
   if(u==='alt')return '<p class="lg-umz">'+t('umz.login.alt')+' <a href="'+esc(UMZUG.neu)+'">skuro.app</a></p>';return ''}
 function warteCard(){if(!SY.wartet||!loggedIn())return '';return '<div class="card warte"><b>'+t('warte.kurz')+'</b><p class="small" style="margin:6px 0 0">'+t('warte.text')+'</p></div>'}
-function testerCard(){if(SY.role!=='tester'||S.ui.testerOk)return '';
+function testerCard(){if((SY.role!=='tester'&&SY.role!=='pruefer')||S.ui.testerOk)return ''; /* Chef #112: pruefer = tester */
   return '<div class="card tester" style="margin-top:12px"><b>Du bist Tester</b><p class="small" style="margin:6px 0">Du nutzt eine frühe Version der App. Wenn dir ein Fehler auffällt, du eine Idee hast oder dir etwas nicht gefällt: tippe unten rechts auf <b>Melden</b>. Die Meldung geht mit einem Bild der Seite direkt an den Entwickler.</p><p class="small muted" style="margin:0 0 8px">Dein Lernstand wird nur für dein Konto gespeichert und zwischen deinen Geräten abgeglichen.</p><button class="btn sm" data-act="testerok">Verstanden</button></div>'}
 function syLater(){if(!syncAllowed())return;clearTimeout(syTimer);syTimer=setTimeout(function(){syncNow(true)},4000)}
 function syStatus(){if(!loggedIn())return 'Nicht angemeldet';if(!navigator.onLine)return '<span class="badc">'+t('sync.offline')+'</span>'; /* Befund 104 */if(SY.err)return '<span class="badc">Problem: '+esc(SY.err)+'</span>';if(!SY.last)return 'Angemeldet, noch nicht synchronisiert';var d=new Date(SY.last);return '<span class="okc">Synchron</span> · zuletzt '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' Uhr'}
