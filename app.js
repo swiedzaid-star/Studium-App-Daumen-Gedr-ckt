@@ -31,7 +31,7 @@ function pwOk(p){p=String(p||'');return p.length>=PW_MIN&&/[a-zäöüß]/.test(p
    an:true, live:false = Ankündigung auf der alten Adresse („zieht um“, vorher synchronisieren, noch kein Link);
    an:true, live:true  = „ist umgezogen“ mit Link auf der alten Adresse, auf skuro.app ein Satz auf der Anmeldeseite.
    Test-Schalter: window.__umzug = 'bald' | 'alt' | 'neu'. */
-var UMZUG={an:true,live:true, /* Umschalt-Tag So 16.11.: skuro.app ist live */ datum:'Sonntag, 16.11.',kurz:'16.11.', /* Chef #96: Ankündigung ab Sa 14.11. (Paket 1), Umschalt-Tag So 16.11. 14 Uhr; danach live:true */ neu:'https://skuro.app/',neuHost:/^(www\.)?skuro\.app$/},UMZ={ok:0},UMZ_SP='studium-umz-spaeter',UMZ_OK='studium-umz-ok'; /* Schlüssel am Dateianfang: die erste Seite braucht sie (#91) */
+var UMZUG={an:true,live:true, /* Umschalt-Tag So 16.11.: skuro.app ist live */ datum:'Sonntag, 16.11.',kurz:'16.11.', /* Chef #96: Ankündigung ab Sa 14.11. (Paket 1), Umschalt-Tag So 16.11. 14 Uhr; danach live:true */ neu:'https://skuro.app/',neuHost:/^(www\.)?skuro\.app$/},UMZ={ok:0},NUTZ=null /* #107 Nutzungsübersicht (nur owner), am Dateianfang: die erste Seite kann #/nutzung sein */,UMZ_SP='studium-umz-spaeter',UMZ_OK='studium-umz-ok'; /* Schlüssel am Dateianfang: die erste Seite braucht sie (#91) */
 var ANF=null, /* E3 Fassung 3; Chef #80: kein Vorname in der App, der Text nennt „das Skuro-Team“ (i18n warte.*) */ SYNC_MAX=1.5*1024*1024, /* Befund 88: in BYTES, mit Abstand zur Datenbank-Grenze 2 MB (jsonb::text setzt Leerzeichen, Umlaute = 2 Bytes) */REGISTRIERUNG_AN=false,LGMODE='login',LGMAIL='',ZUG=null;
 var KEY='studium-v1', S;
 var DEVID=(function(){try{var d=localStorage.getItem('device');if(!d){d=Math.random().toString(36).slice(2,10);localStorage.setItem('device',d)}return d}catch(e){return 'x'}})(),DEVNAME=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)?'Handy':'Laptop';
@@ -236,7 +236,27 @@ function ck(id,label){var on=!!S.done[id];return '<button class="ck'+(on?' on':'
 function wideMath(el){try{(el||document).querySelectorAll('mjx-container:not([display="true"])').forEach(function(m){var p=m.parentElement;if(!p)return;var w=m.getBoundingClientRect().width,c=p.clientWidth-(m.closest('.anim-f')?20:0);if(w<=c+1)return;
   if(m.closest('.anim-f')&&c/w>=.66){m.style.fontSize=(Math.floor(c/w*100)/100)+'em';return} /* Animation: Ergebnis soll ganz sichtbar sein, lieber etwas kleiner */
   if(m.closest('.anim-tx,.fsteps,.fmist')&&c/w>=.7){m.style.fontSize=(Math.floor(c/w*100)/100)+'em';return} /* Befund 110: Formel im Schritt-Text (z. B. „… = 5,40 kN“) ganz zeigen statt seitlich abschneiden */
+  /* #111: Lösungsweg, Probe, Formelliste, Karteikarte – leicht verkleinern (bis 80 %), sonst an den „=“ umbrechen, sonst weiter verkleinern (bis 60 %), erst zuletzt wischen (mit Hinweis) */
+  if(m.closest('.sol,.fxt,.flip')){var q=c/w;if(q>=.8){m.style.fontSize=(Math.floor(q*100)/100-.02)+'em';return}if(mjBrich(m))return;if(q>=.62){m.style.fontSize=(Math.floor(q*100)/100-.02)+'em';return}m.style.fontSize='.6em'}
   m.classList.add('mjwide')})}catch(e){}}
+/* Lange Gleichungskette auf mehrere Zeilen: „a = b = c“ → a &= b \\ &= c (oberste Ebene, nicht in Klammern/\left…\right).
+   Ersetzt die zu breite Inline-Formel durch eine abgesetzte, links ausgerichtete Formel und setzt sie neu; passt sie dann
+   noch nicht, wird sie verkleinert (bis 60 %) und erst danach wischbar. Gibt false zurück, wenn es nichts zu brechen gibt. */
+function mjTeile(tex){var teile=[],tiefe=0,lr=0,cur='',i=0;while(i<tex.length){var ch=tex[i];
+    if(tex.substr(i,5)==='\\left'){lr++;cur+='\\left';i+=5;continue}if(tex.substr(i,6)==='\\right'){lr--;cur+='\\right';i+=6;continue}
+    if(ch==='\\'){cur+=tex.substr(i,2);i+=2;continue}if(ch==='{')tiefe++;else if(ch==='}')tiefe--;
+    if((ch==='='||tex.substr(i,7)==='\\approx')&&tiefe===0&&lr===0&&cur.trim()){teile.push(cur);cur='';if(ch==='='){cur='=';i++}else{cur='\\approx';i+=7}continue}
+    cur+=ch;i++}
+  if(cur.trim())teile.push(cur);return teile}
+function mjBrich(m){try{if(!window.MathJax||!MathJax.startup||!MathJax.startup.document||m.closest('.mjsplit'))return false;
+  var it=MathJax.startup.document.getMathItemsWithin(m.parentElement).filter(function(x){return x.typesetRoot===m})[0];if(!it||!it.math)return false;
+  var teile=mjTeile(String(it.math));if(teile.length<2)return false;
+  /* teile = ['a', '= b', '= c'] → a &= b \\ &= c */
+  var zeilen=[teile[0]+' &'+teile[1]].concat(teile.slice(2).map(function(t){return '&'+t})),tex='\\begin{aligned}'+zeilen.join('\\\\')+'\\end{aligned}';
+  var sp=document.createElement('span');sp.className='mjsplit';sp.textContent='\\['+tex+'\\]';m.parentElement.replaceChild(sp,m);
+  MathJax.typesetPromise([sp]).then(function(){var d=sp.querySelector('mjx-container');if(!d)return;var c=sp.parentElement.clientWidth,w=d.scrollWidth||d.getBoundingClientRect().width;
+    if(w>c+1){if(c/w>=.62)d.style.fontSize=(Math.floor(c/w*100)/100-.02)+'em';else{d.style.fontSize='.6em';d.classList.add('mjwide')}}}).catch(function(){});
+  return true}catch(e){return false}}
 /* Formel im Quiz/Fenster (.fxbig): zu breit → verkleinern bis 55 %, damit sie ganz sichtbar ist; erst darunter seitlich wischen */
 function fitFx(el){try{(el||document).querySelectorAll('.fxbig').forEach(function(b){var m=b.querySelector('mjx-container');if(!m)return;m.style.fontSize='';var c=b.clientWidth-24,w=m.scrollWidth||m.getBoundingClientRect().width;if(w>c+1)m.style.fontSize=Math.max(.55,Math.floor(c/w*100)/100)+'em'})}catch(e){}}
 function ts(el){try{if(window.MathJax&&MathJax.typesetPromise){if(MathJax.typesetClear)MathJax.typesetClear([el]);return MathJax.typesetPromise([el]).then(function(){wideMath(el);fitFx(el)}).catch(function(){})}}catch(e){}return Promise.resolve()}
@@ -282,10 +302,11 @@ function route(keep){try{ensureFixPlans()}catch(e){}
     else if(v==='studium')html=S.paket?vStudium():vFaecher();
     else if(v==='symbole')html=vSymbole();
     else if(v==='konto')html=vKonto();
+    else if(v==='nutzung'){html=vNutzung();document.body.classList.add('pg-studium')}
     else html=vHeute();
   }catch(err){html='<div class="wrap"><p class="empty">Hier ist etwas schiefgelaufen: '+esc(err.message)+'</p></div>';console.error(err)}
   main.innerHTML=html;animInit(main);meldenBtn();
-  $$('.nav a').forEach(function(a){a.classList.toggle('on',a.getAttribute('data-v')===(v==='fach'||v==='studium'||v==='symbole'?'faecher':v))});
+  $$('.nav a').forEach(function(a){a.classList.toggle('on',a.getAttribute('data-v')===(v==='fach'||v==='studium'||v==='symbole'?'faecher':v==='nutzung'?'konto':v))});
   var nb=$('#navbadge'),mc=missed().length;if(nb){nb.textContent=mc;nb.hidden=!mc}anfBadge();
   window.scrollTo(0,keep?y:0);var tp=ts(main);if(keep&&y){ /* Lesestelle halten: nach dem Formelsatz verschieben sich Höhen, deshalb noch einmal hinspringen */ tp.then(function(){window.scrollTo(0,y)})}
   if(!keep){var oc=document.querySelector('.tourc');if(oc){oc.remove();tourClear();TOUR.key=null}}setTimeout(function(){tourMaybe(false)},700);
@@ -427,7 +448,7 @@ function vHeute(){
   var weekEnd=addDays(thisMon,7);
   var wk=upcoming().filter(function(e){return e.d<addDays(TODAY,8)}).slice(0,5);
   var h='<div class="wrap top"><div class="eyebrow">'+WDL[TODAY.getDay()]+', '+TODAY.getDate()+'. '+MON[TODAY.getMonth()]+'</div><h1>'+greet()+(S.name?', <span class="nosnap">'+esc(S.name)+'</span>':'')+'</h1>'+(umzZeile()||sqLine())+(S.name?'':'<div class="card" style="margin-top:12px"><b>Wie heißt du?</b><p class="small muted" style="margin:4px 0 8px">Damit die App dich begrüßt. Wird mit deinen Geräten synchronisiert.</p><div class="btns"><input class="search nosnap" id="nm" placeholder="Vorname" autocomplete="given-name" style="flex:1;min-width:0"><button class="btn sm" data-act="setname">Speichern</button></div></div>')+
-   '<div class="stats"><span class="stat"><span class="fire">'+IC.fire+'</span><b>'+st+'</b> '+(st===1?'Tag':'Tage')+' Serie</span><span class="stat">'+IC.bolt+'<b>Level '+lv.l+'</b><span class="bar sm"><span style="width:'+Math.round(lv.cur/lv.need*100)+'%"></span></span></span><button class="stat" data-act="theme" data-t="'+(S.theme==='dark'?'light':S.theme==='light'?'auto':'dark')+'" aria-label="Design wechseln">'+(S.theme==='dark'?'☾ Dunkel':S.theme==='light'?'☀ Hell':'◐ Auto')+'</button></div></div>';
+   '<div class="stats"><span class="stat"><span class="fire">'+IC.fire+'</span><b>'+st+'</b> '+(st===1?'Tag':'Tage')+' in Folge</span><span class="stat">'+IC.bolt+'<b>Level '+lv.l+'</b><span class="bar sm"><span style="width:'+Math.round(lv.cur/lv.need*100)+'%"></span></span></span><button class="stat" data-act="theme" data-t="'+(S.theme==='dark'?'light':S.theme==='light'?'auto':'dark')+'" aria-label="Design wechseln">'+(S.theme==='dark'?'☾ Dunkel':S.theme==='light'?'☀ Hell':'◐ Auto')+'</button></div></div>';
   h+='<div class="wrap">';
   h+=umzugCard('heute');h+=installCard();h+=warteCard();h+=testerCard();h+=mvHintCard();
   /* #83 „Luft“ (Inhaber 13.11.): die Hinweise „neue Symbole“ und „verpasste Fristen“ entfallen auf Heute –
@@ -472,6 +493,7 @@ function eigeneSheet(){var opts='<option value="studium">Allgemein</option>'+MOD
 /* Kalender: Wochenleiste + Tagesansicht (oder Monat) */
 function evType(e){var t=e.title||'';
   if(e.exam)return 'Prüfung';if(isDl(e))return 'Frist';
+  if(e.kind==='termin'&&/Online-HA|startet|Abgabe|Anmeldung|Einsicht/i.test(t))return 'Termin'; /* #111: „Online-HA 2 startet (… Modul 2 …)“ ist keine Vorlesung */
   if(/Präsenzübung|Gruppenübung|Tutorium|Kleingruppe/i.test(t))return 'Präsenzübung';
   if(/Fragestunde/i.test(t))return 'Fragestunde';
   if(/Vortragsübung/i.test(t))return 'Vortragsübung';
@@ -484,8 +506,8 @@ function planRange(m){ /* Fach mit echtem Semesterplan (>=5 datierte Termine mit
 function dayItems(d){
   var y=ymd(d),evs=events().filter(function(e){return +e.d===+d&&!UI.calOff[e.mod]}),wl=calWeeklyOn(d),out=[];
   evs.forEach(function(e){
-    var w=wl.filter(function(x){return x.mod===e.mod&&e.tm!=null&&tmin(x.time)===e.tm})[0];
-    var rg=/(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})/.exec(e.title||''),ty=evType(e);
+    var ty=evType(e),w=/^(Termin|Frist|Prüfung)$/.test(ty)?null:wl.filter(function(x){return x.mod===e.mod&&e.tm!=null&&tmin(x.time)===e.tm})[0]; /* #111: nur Vorlesung/Übung mit dem Stundenplan-Eintrag zusammenlegen, keinen Termin/keine Frist */
+    var rg=/(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})/.exec(e.title||'');
     var from=e.time&&e.tm!=null?e.time:null,to=null;
     if(w)to=w.time.split('–')[1];else if(rg){from=rg[1];to=rg[2]}else if(from&&/Vorlesung|Übung|Präsenz|Fragestunde/.test(ty))to=mtime(tmin(from)+90);
     out.push({ev:e,mod:e.mod,title:(e.title||'').replace(/\s*\(\d{1,2}:\d{2}\s*[–-]\s*\d{1,2}:\d{2}\)/,''),type:ty,from:from,to:to,place:(w&&w.place&&(w.place.length>(e.place||'').length)?w.place:e.place)||'',note:(e.note||'')+(w&&w.note?(e.note?' · ':'')+w.note:'')});
@@ -564,8 +586,8 @@ function vFristen(tab){
 function vFaecher(){
   var h='<div class="wrap top"><div class="eyebrow">Wintersemester 26/27</div><h1>Fächer</h1></div><div class="wrap"><div class="tiles" style="margin-top:12px">';
   MODS.forEach(function(m){var nx=nextExam(m),er=nx?examReady(nx):null,p=er!=null?pct(er):null;
-    h+='<a class="tile '+cls(m.id)+'" href="#/fach/'+m.id+'/woche"><span class="n">'+esc(m.name)+'</span><span class="s">'+(m.lectures.length?m.lectures.length+' Vorlesungen · '+termsOf(m).length+' Begriffe':'noch kein Stoff')+'</span>'+
-     (p!=null?'<span class="bar sm on-band"><span style="width:'+p+'%"></span></span>':'')+(nx?'<span class="chip">'+esc(nx.name)+(nx.date?' '+rel(pd(nx.date)):' · Termin offen')+'</span>':'')+'</a>'});
+    h+='<a class="tile '+cls(m.id)+'" href="#/fach/'+m.id+'/woche"><span class="n">'+esc(m.name)+'</span><span class="s">'+(m.lectures.length?(function(nv,nb){return nv+(nv===1?' Vorlesung':' Vorlesungen')+' · '+nb+(nb===1?' Begriff':' Begriffe')})(m.lectures.length,termsOf(m).length):'noch kein Stoff')+'</span>'+
+     (p!=null?'<span class="bar sm on-band"><span style="width:'+p+'%"></span></span>':'')+(nx?(function(tx){return '<span class="chip" title="'+esc(tx)+'">'+esc(tx)+'</span>'})(nx.name+(nx.date?' '+rel(pd(nx.date)):' · Termin offen')):'')+'</a>'}); /* #106: voller Text als title, Chip bricht um */
   if(S.paket)h+='<a class="tile m-studium" href="#/studium"><span class="n">Mein Studiengang</span><span class="s">Regeln, Fristen, Lernregeln, Einstellungen</span><span class="chip">Studienplan</span></a>';
   if(MOD.mathe)h+='<button class="tile m-mathe" data-act="dyn" style="text-align:left"><span class="n">Dynexite-Eingabe</span><span class="s">-1/2, 2*sqrt(3), exp(-2), abs(x) …</span><span class="chip">Testat-Format</span></button>';
   if(MODS.some(function(m){var k=katMod(m.id);return k&&(k.werkzeuge||[]).indexOf('symbole')>=0})&&symKeys().length)h+='<a class="tile m-studium" href="#/symbole"><span class="n">Symbole, Zeichen und Einheiten</span><span class="s">Was bedeutet π, Σ, ∀ …? Und MN → kN → N, N/mm² ↔ MPa</span><span class="chip">'+symKeys().filter(symKnown).length+' / '+symKeys().length+' gekonnt</span>'+(symNew().length?'<span class="chip newc">'+symNew().length+' neu</span>':'')+'<span class="chip">3 Stufen</span></a>';
@@ -1205,6 +1227,73 @@ function spAct(a,el){
 var SUPPORT_MAIL='support@skuro.app'; /* Support-Adresse: EINE Stelle für Konto-Seite, Anmeldeseite, Impressum, Datenschutz, Nutzungsbedingungen (Chef #101: Weiterleitung aktiv seit 14.11.; build.py prüft gegen docs/rechtstexte.md). Leer = Platzhalter sichtbar */
 function supportMail(){return SUPPORT_MAIL?'<a href="mailto:'+esc(SUPPORT_MAIL)+'">'+esc(SUPPORT_MAIL)+'</a>':'<span class="ph">'+t('ko.support.fehlt')+'</span>'}
 function koSeg(act,cur,opts){return '<div class="tabs koseg" role="group">'+opts.map(function(o){var on=String(cur)===String(o[0]);return '<button class="'+(on?'on':'')+'" data-act="'+act+'" data-v="'+o[0]+'" aria-pressed="'+on+'">'+o[1]+'</button>'}).join('')+'</div>'}
+/* ===== #107 Nutzungsübersicht (Inhaber 15.11.) – nur Rolle owner, nur Daten, die ohnehin gespeichert werden =====
+   Lesen: progress (nur die nötigen Felder per PostgREST-JSON-Pfad, kein ganzer Lernstand), profiles (Rolle),
+   rpc nutzung_konten (E-Mail, letzte Anmeldung – nur Detail). Zugriff regelt die Datenbank (RLS/ist_inhaber(),
+   docs/supabase-schema.sql Schritt 6); die App fragt als Nicht-Inhaber gar nicht erst. Kein Tracking, keine Fremddienste. */
+function nzObj(o){return !!o&&typeof o==='object'&&!Array.isArray(o)}
+function nutzLvl(xp){var l=1,need=100;xp=+xp||0;while(xp>=need){xp-=need;l++;need=100+l*40}return l}
+function nutzModOf(id){return (TASK[id]&&TASK[id].mod)||String(id).split('-')[0]}
+function nutzAuswerten(rows,profs,konten,heute){var rolle={},kt={},i;(profs||[]).forEach(function(p){rolle[p.user_id]=p.role});(konten||[]).forEach(function(k){kt[k.user_id]=k});
+  var tage14=[];for(i=13;i>=0;i--)tage14.push(ymd(addDays(heute,-i)));var t0=new Date(heute.getFullYear(),heute.getMonth(),heute.getDate()).getTime();
+  var nutzer=(rows||[]).map(function(r){var days=nzObj(r.days)?r.days:{},tasks=nzObj(r.tasks)?r.tasks:{},hp=nzObj(r.haeppchen)?r.haeppchen:{};
+    var dk=Object.keys(days).filter(function(k){return +days[k]>0}),tk=Object.keys(tasks),last=Math.max(Date.parse(r.updated_at)||0,(nzObj(r.last)&&+r.last.t)||0);
+    return {id:String(r.user_id),kenn:(typeof r.name==='string'&&r.name.trim())?r.name.trim().slice(0,30):'Konto '+String(r.user_id).slice(0,4),rolle:rolle[r.user_id]||'',
+      zuletzt:last||0,lerntage:dk.length,t14:tage14.map(function(k){return +days[k]||0}),xp:+r.xp||0,lvl:nutzLvl(r.xp),
+      richtig:tk.filter(function(k){return nzObj(tasks[k])&&tasks[k].r===1}).length,gesamt:tk.length,
+      hp:Object.keys(hp).reduce(function(a,d){return a+(nzObj(hp[d])?Object.keys(hp[d]).length:0)},0),
+      mods:Array.isArray(r.mods)?r.mods.filter(function(x){return typeof x==='string'}):[],tasks:tasks,mail:(kt[r.user_id]&&kt[r.user_id].email)||'',anm:(kt[r.user_id]&&kt[r.user_id].last_sign_in_at)||''}});
+  nutzer.sort(function(a,b){return b.zuletzt-a.zuletzt});
+  var ids={};(profs||[]).forEach(function(p){ids[p.user_id]=1});nutzer.forEach(function(n){ids[n.id]=1});
+  var seit=function(tage){var g=t0-(tage-1)*864e5;return nutzer.filter(function(n){return n.zuletzt>=g}).length};
+  var sum={konten:Object.keys(ids).length,tester:(profs||[]).filter(function(p){return p.role==='tester'}).length,heute:seit(1),d7:seit(7),d30:seit(30),
+    lerntage:nutzer.reduce(function(a,n){return a+n.lerntage},0),richtig:nutzer.reduce(function(a,n){return a+n.richtig},0),hp:nutzer.reduce(function(a,n){return a+n.hp},0)};
+  var fach={},thema={};nutzer.forEach(function(n){n.mods.forEach(function(m){(fach[m]=fach[m]||{id:m,nutzer:0,bearb:0,richtig:0}).nutzer++});
+    Object.keys(n.tasks).forEach(function(k){var x=n.tasks[k];if(!nzObj(x))return;var m=nutzModOf(k),f=fach[m]=fach[m]||{id:m,nutzer:0,bearb:0,richtig:0};f.bearb++;if(x.r===1)f.richtig++;
+      var tp=TASK[k]&&TASK[k].topic;if(!tp)return;var th=thema[tp]=thema[tp]||{id:tp,mod:m,falsch:0,gesamt:0};th.gesamt++;if(x.r!==1)th.falsch++})});
+  return {sum:sum,nutzer:nutzer,tage14:tage14,
+    faecher:Object.keys(fach).map(function(k){return fach[k]}).sort(function(a,b){return b.bearb-a.bearb||b.nutzer-a.nutzer}),
+    themen:Object.keys(thema).map(function(k){return thema[k]}).filter(function(x){return x.falsch>0}).sort(function(a,b){return b.falsch-a.falsch||b.falsch/b.gesamt-a.falsch/a.gesamt}).slice(0,10)}}
+function nutzLaden(){if(SY.role!=='owner'||!syncAllowed())return;NUTZ={laedt:1};
+  var sel='user_id,updated_at,name:data->name,xp:data->xp,days:data->days,haeppchen:data->haeppchen,tasks:data->tasks,mods:data->mods,last:data->ui->last';
+  Promise.all([sbAuthed('/rest/v1/progress?select='+sel),sbAuthed('/rest/v1/profiles?select=user_id,role,created_at'),
+    sbAuthed('/rest/v1/rpc/nutzung_konten',{method:'POST',body:'{}'}).catch(function(){return null})]) /* E-Mail/letzte Anmeldung: nur, wenn die SQL-Funktion eingespielt ist */
+  .then(function(r){NUTZ={rows:r[0]||[],profs:r[1]||[],konten:r[2]||[],ohneKonten:r[2]==null,t:Date.now()}},function(e){NUTZ={err:String(e&&e.message||e)}})
+  .then(function(){if(/^#\/nutzung/.test(location.hash)&&layer.hidden)rerender()})}
+function nzZeit(ts){if(!ts)return '–';var d=new Date(ts),tage=Math.round((new Date(TODAY).getTime()-new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime())/864e5);
+  return tage<=0?'heute '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'):tage===1?'gestern':'vor '+tage+' Tagen'}
+function nzBalken(t14){var mx=Math.max.apply(null,t14.concat([1]));return '<span class="nz-bars" aria-label="Lerntage der letzten 14 Tage: '+t14.filter(function(x){return x>0}).length+'">'+t14.map(function(x){return '<i style="height:'+(x?Math.max(18,Math.round(x/mx*100)):6)+'%"'+(x?' class="on"':'')+'></i>'}).join('')+'</span>'}
+function vNutzung(){var h='<div class="m-studium"><div class="band"><div class="wrap"><a class="back" href="#/konto">'+IC.back+' '+t('ko.title')+'</a><h1>'+t('nutz.title')+'</h1><p style="opacity:.9">'+t('nutz.band')+'</p></div></div><div class="wrap nutz">';
+  if(SY.role!=='owner')return h+'<section class="sec"><div class="card empty">'+t('nutz.nurinhaber')+'</div></section></div></div>'; /* Rechte prüft die Datenbank; hier nur kein Versuch */
+  if(!NUTZ){setTimeout(nutzLaden,0);NUTZ={laedt:1}}
+  if(NUTZ.laedt)return h+'<section class="sec"><div class="card empty"><div class="bootspin"></div> '+t('nutz.laedt')+'</div></section></div></div>';
+  if(NUTZ.err)return h+'<section class="sec"><div class="card empty">'+t('nutz.fehler',{m:esc(NUTZ.err)})+'<div class="btns" style="justify-content:center"><button class="btn sm" data-nz="neu">'+t('nutz.neu')+'</button></div></div></section></div></div>';
+  var A=nutzAuswerten(NUTZ.rows,NUTZ.profs,NUTZ.konten,TODAY),s=A.sum,kach=function(n,l){return '<div class="nz-k"><b>'+n+'</b><span>'+l+'</span></div>'};
+  h+='<section class="sec"><h2>'+t('nutz.summen')+' <button class="btn sm ghost" data-nz="neu" style="margin-left:auto">'+t('nutz.neu')+'</button></h2><div class="nz-sum">'+kach(s.konten,'Konten')+kach(s.tester,'Tester')+kach(s.heute,'aktiv heute')+kach(s.d7,'aktiv 7 Tage')+kach(s.d30,'aktiv 30 Tage')+kach(s.lerntage,'Lerntage gesamt')+kach(s.richtig,'Aufgaben gelöst')+kach(s.hp,'Häppchen erledigt')+'</div>'+
+    '<p class="small muted" style="margin-top:10px">'+t('nutz.stand',{z:nzZeit(NUTZ.t)})+(NUTZ.ohneKonten?' · '+t('nutz.ohnekonten'):'')+'</p></section>';
+  h+='<section class="sec"><h2>'+t('nutz.nutzer')+' <span class="chip acc">'+A.nutzer.length+'</span></h2>'+(A.nutzer.length?'<div class="list nz-list">'+A.nutzer.map(function(n){
+      return '<button class="item nz-row" data-nz="d:'+esc(n.id)+'"><span class="grow"><span class="t">'+esc(n.kenn)+(n.rolle?' <span class="chip">'+esc(n.rolle)+'</span>':'')+'</span><span class="s">'+nzZeit(n.zuletzt)+' · Level '+n.lvl+' · '+n.xp+' XP</span>'+
+        '<span class="s">Aufgaben '+n.richtig+'/'+n.gesamt+' richtig · Häppchen '+n.hp+' · Lerntage '+n.lerntage+'</span></span>'+nzBalken(n.t14)+'</button>'}).join('')+'</div>':'<div class="card empty">'+t('nutz.leer')+'</div>')+
+    '<div class="btns"><button class="btn soft" data-nz="csv">'+t('nutz.csv')+'</button></div></section>';
+  h+='<section class="sec"><h2>'+t('nutz.faecher')+'</h2>'+(A.faecher.length?'<div class="list">'+A.faecher.map(function(f){return '<div class="item '+cls(f.id)+'"><span class="dot"></span><span class="grow"><span class="t">'+esc(SHORT[f.id]||f.id)+'</span><div class="s">'+f.nutzer+' '+(f.nutzer===1?'Nutzer':'Nutzer')+' · '+f.bearb+' Aufgaben bearbeitet'+(f.bearb?' · '+Math.round(f.richtig/f.bearb*100)+' % richtig':'')+'</div></span></div>'}).join('')+'</div>':'<div class="card empty">'+t('nutz.leer')+'</div>')+'</section>';
+  h+='<section class="sec"><h2>'+t('nutz.themen')+'</h2>'+(A.themen.length?'<div class="list">'+A.themen.map(function(x){var tp=TOPIC[x.id];return '<div class="item '+cls(x.mod)+'"><span class="dot"></span><span class="grow"><span class="t">'+esc(tp?tp.name:x.id)+'</span><div class="s">'+esc(SHORT[x.mod]||x.mod)+' · '+x.falsch+' von '+x.gesamt+' zuletzt falsch</div></span></div>'}).join('')+'</div>':'<div class="card empty">'+t('nutz.keinefehler')+'</div>')+
+    '<p class="small muted" style="margin-top:10px">'+t('nutz.hinweis')+'</p></section>';
+  return h+'</div></div>'}
+function nzCsv(){if(!NUTZ||!NUTZ.rows)return;var A=nutzAuswerten(NUTZ.rows,NUTZ.profs,NUTZ.konten,TODAY),q=function(x){x=String(x==null?'':x);return /[";\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x};
+  var z=[['kennung','rolle','zuletzt_aktiv','lerntage_14','lerntage_gesamt','xp','level','aufgaben_richtig','aufgaben_gesamt','haeppchen']].concat(A.nutzer.map(function(n){
+    return [n.kenn,n.rolle,n.zuletzt?new Date(n.zuletzt).toISOString():'',n.t14.filter(function(x){return x>0}).length,n.lerntage,n.xp,n.lvl,n.richtig,n.gesamt,n.hp]})); /* ohne E-Mail */
+  var blob=new Blob(['﻿'+z.map(function(r){return r.map(q).join(';')}).join('\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download='skuro-nutzung-'+ymd(TODAY)+'.csv';document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},500)}
+document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('[data-nz]');if(!b)return;var k=b.getAttribute('data-nz');
+  if(k==='1'){NUTZ=null;return} /* Link aus dem Konto: frisch laden */
+  if(k==='neu'){nutzLaden();rerender();return}
+  if(k==='csv'){nzCsv();return}
+  if(k.indexOf('d:')===0&&NUTZ&&NUTZ.rows){var A=nutzAuswerten(NUTZ.rows,NUTZ.profs,NUTZ.konten,TODAY),n=A.nutzer.find(function(x){return x.id===k.slice(2)});if(!n)return;
+    sheet('<h2>'+esc(n.kenn)+'</h2><div class="card"><div class="korow"><div class="kolbl">'+t('ko.mail')+'</div><b class="nosnap">'+esc(n.mail||'–')+'</b></div>'+
+      '<div class="korow"><div class="kolbl">Kennung</div><code class="nosnap">'+esc(n.id)+'</code></div><div class="korow"><div class="kolbl">Rolle</div>'+esc(n.rolle||'–')+'</div>'+
+      '<div class="korow"><div class="kolbl">Zuletzt aktiv</div>'+nzZeit(n.zuletzt)+'</div><div class="korow"><div class="kolbl">Letzte Anmeldung</div>'+(n.anm?nzZeit(Date.parse(n.anm)):'–')+'</div>'+
+      '<div class="korow"><div class="kolbl">Fächer</div>'+(n.mods.length?n.mods.map(function(m){return esc(SHORT[m]||m)}).join(', '):'–')+'</div>'+
+      '<div class="korow"><div class="kolbl">Lerntage (14 Tage)</div>'+nzBalken(n.t14)+'</div></div>',{title:t('nutz.title')})}});
 function koSec(k,body){return '<section class="sec"><h2>'+t(k)+'</h2><div class="card kocard">'+body+'</div></section>'}
 function koRow(lbl,body,sub){return '<div class="korow"><div class="kolbl">'+lbl+(sub?'<span class="s">'+sub+'</span>':'')+'</div>'+body+'</div>'}
 function vKonto(){var u=AUTH.user||{},L=lern(),ch=chosen()||[],th=S.theme||'auto',role=SY.role||'',pk=S.paket&&(KAT.pakete||[]).find(function(x){return x.id===S.paket});
@@ -1225,6 +1314,7 @@ function vKonto(){var u=AUTH.user||{},L=lern(),ch=chosen()||[],th=S.theme||'auto
     koRow(t('ko.fehler'),koSeg('kofehler',S.ui.fehlerAus?'aus':'an',[['an',t('ko.an')],['aus',t('ko.aus')]]),t('ko.fehler.sub')));
   if(role==='owner')h+='<section class="sec"><h2>'+t('anf.title')+(Array.isArray(ANF)&&ANF.length?' <span class="chip warn">'+ANF.length+'</span>':'')+'</h2><div class="card kocard">'+koAnfragen()+'</div></section>';
   if(role==='owner')h+=koSec('zug.title',koZugaenge());
+  if(role==='owner')h+=koSec('nutz.title',koRow(t('nutz.kurz'),'<a class="btn sm" href="#/nutzung" data-nz="1">'+t('nutz.oeffnen')+'</a>',t('nutz.sub'))); /* #107 */
   h+=koSec('ko.rolle',koRow(t('ko.rolle.du'),'<span class="chip '+(role?'acc':'')+'">'+t(role==='owner'?'ko.rolle.owner':role==='tester'?'ko.rolle.tester':SY.wartet?'ko.rolle.wartet':'ko.rolle.keine')+'</span>'));
   h+=koSec('ko.recht','<div class="btns" style="margin-top:0"><a class="btn sm ghost" href="#/impressum">'+t('recht.impressum')+'</a><a class="btn sm ghost" href="#/datenschutz">'+t('ko.datenschutz')+'</a><a class="btn sm ghost" href="#/nutzungsbedingungen">'+t('ko.nutzung')+'</a></div>'+
     '<details class="kolic"><summary>'+t('ko.lizenzen')+'</summary><ul class="small"><li>Plus Jakarta Sans, JetBrains Mono – SIL Open Font License 1.1 (site/vendor/fonts)</li><li>MathJax – Apache License 2.0 (site/vendor/mathjax)</li><li>html-to-image – MIT License (site/vendor/html-to-image)</li></ul><p class="small muted">'+t('ko.lizenzen.sub')+'</p></details>'+
@@ -1300,7 +1390,9 @@ function pwFehler(e){var m=String(e&&e.message||e),st=e&&e.status,c=e&&e.code||'
 document.addEventListener('input',function(e){if(!e.target||(e.target.id!=='kpw0'&&e.target.id!=='kpw1'&&e.target.id!=='kpw2'))return;var c=$('#kpwchk');if(c)c.innerHTML=pwChecks(($('#kpw1')||{}).value||'',($('#kpw2')||{}).value||'');var er=$('#kpwerr');if(er)er.textContent=''});
 document.addEventListener('submit',function(e){if(!e.target||e.target.id!=='kpwf')return;e.preventDefault();var b=$('#kpwgo');if(b&&!b.disabled)koAct('kopwset',b)}); /* Enter/„Fertig“ auf der Tastatur speichert */
 /* Zugangsanfragen (E3 Fassung 3): Liste aus public.anfragen (RLS: nur owner), Freigeben/Ablehnen über die Function 'anfrage' */
-function anfLaden(){if(!syncAllowed())return Promise.resolve();return sbAuthed('/rest/v1/anfragen?select=user_id,email,angefragt_am,bestaetigt_am&order=angefragt_am.desc').then(function(r){ANF=r||[];anfBadge();if(layer.hidden&&/^#\/konto/.test(location.hash))rerender()},function(e){if(e&&(e.status===404||/PGRST205|42P01|schema cache/i.test(String(e.message)))){ANF=[];return}ANF={err:String(e.message||e)};if(/^#\/konto/.test(location.hash))rerender()})}
+function anfLaden(){if(!syncAllowed())return Promise.resolve();return sbAuthed('/rest/v1/anfragen?select=user_id,email,angefragt_am,bestaetigt_am&order=angefragt_am.desc').then(function(r){ANF=r||[];anfBadge();if(layer.hidden&&/^#\/konto/.test(location.hash)&&!koTippt())rerender()},function(e){if(e&&(e.status===404||/PGRST205|42P01|schema cache/i.test(String(e.message)))){ANF=[];return}ANF={err:String(e.message||e)};if(/^#\/konto/.test(location.hash)&&!koTippt())rerender()})}
+/* Nicht neu zeichnen, solange im Konto in einem Feld getippt wird (sonst ist die Eingabe weg, z. B. die Adressliste der Zugänge) */
+function koTippt(){var a=document.activeElement;return !!(a&&main.contains(a)&&/^(INPUT|TEXTAREA)$/.test(a.tagName)&&a.type!=='checkbox'&&a.type!=='radio'&&a.value)}
 function anfBadge(){var b=$('#navbadge2'),n=SY.role==='owner'&&Array.isArray(ANF)?ANF.length:0;if(b){b.textContent=n;b.hidden=!n}}
 function koAnfragen(){if(ANF==null){ANF='laed';setTimeout(anfLaden,0)}var l=Array.isArray(ANF)?ANF:[];
   if(!Array.isArray(ANF))return '<p class="small muted" style="margin:12px 0">'+(ANF&&ANF.err?'<span class="badc">'+esc(ANF.err)+'</span>':t('zug.laed'))+'</p>';
