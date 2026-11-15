@@ -1229,7 +1229,7 @@ function supportMail(){return SUPPORT_MAIL?'<a href="mailto:'+esc(SUPPORT_MAIL)+
 function koSeg(act,cur,opts){return '<div class="tabs koseg" role="group">'+opts.map(function(o){var on=String(cur)===String(o[0]);return '<button class="'+(on?'on':'')+'" data-act="'+act+'" data-v="'+o[0]+'" aria-pressed="'+on+'">'+o[1]+'</button>'}).join('')+'</div>'}
 /* ===== #107 Nutzungsübersicht (Inhaber 15.11.) – nur Rolle owner, nur Daten, die ohnehin gespeichert werden =====
    Lesen: progress (nur die nötigen Felder per PostgREST-JSON-Pfad, kein ganzer Lernstand), profiles (Rolle),
-   rpc nutzung_konten (E-Mail, letzte Anmeldung – nur Detail). Zugriff regelt die Datenbank (RLS/ist_inhaber(),
+   keine Namen, keine E-Mails (Chef #111) – je Konto nur eine gekürzte Kennung. Zugriff regelt die Datenbank (RLS/ist_inhaber(),
    docs/supabase-schema.sql Schritt 6); die App fragt als Nicht-Inhaber gar nicht erst. Kein Tracking, keine Fremddienste. */
 function nzObj(o){return !!o&&typeof o==='object'&&!Array.isArray(o)}
 function nutzLvl(xp){var l=1,need=100;xp=+xp||0;while(xp>=need){xp-=need;l++;need=100+l*40}return l}
@@ -1238,7 +1238,7 @@ function nutzAuswerten(rows,profs,konten,heute){var rolle={},kt={},i;(profs||[])
   var tage14=[];for(i=13;i>=0;i--)tage14.push(ymd(addDays(heute,-i)));var t0=new Date(heute.getFullYear(),heute.getMonth(),heute.getDate()).getTime();
   var nutzer=(rows||[]).map(function(r){var days=nzObj(r.days)?r.days:{},tasks=nzObj(r.tasks)?r.tasks:{},hp=nzObj(r.haeppchen)?r.haeppchen:{};
     var dk=Object.keys(days).filter(function(k){return +days[k]>0}),tk=Object.keys(tasks),last=Math.max(Date.parse(r.updated_at)||0,(nzObj(r.last)&&+r.last.t)||0);
-    return {id:String(r.user_id),kenn:(typeof r.name==='string'&&r.name.trim())?r.name.trim().slice(0,30):'Konto '+String(r.user_id).slice(0,4),rolle:rolle[r.user_id]||'',
+    return {id:String(r.user_id),kenn:'Konto '+String(r.user_id).slice(0,6) /* Chef #111: bis auf Weiteres keine Namen/E-Mails, nur Kennung */,rolle:rolle[r.user_id]||'',
       zuletzt:last||0,lerntage:dk.length,t14:tage14.map(function(k){return +days[k]||0}),xp:+r.xp||0,lvl:nutzLvl(r.xp),
       richtig:tk.filter(function(k){return nzObj(tasks[k])&&tasks[k].r===1}).length,gesamt:tk.length,
       hp:Object.keys(hp).reduce(function(a,d){return a+(nzObj(hp[d])?Object.keys(hp[d]).length:0)},0),
@@ -1255,10 +1255,10 @@ function nutzAuswerten(rows,profs,konten,heute){var rolle={},kt={},i;(profs||[])
     faecher:Object.keys(fach).map(function(k){return fach[k]}).sort(function(a,b){return b.bearb-a.bearb||b.nutzer-a.nutzer}),
     themen:Object.keys(thema).map(function(k){return thema[k]}).filter(function(x){return x.falsch>0}).sort(function(a,b){return b.falsch-a.falsch||b.falsch/b.gesamt-a.falsch/a.gesamt}).slice(0,10)}}
 function nutzLaden(){if(SY.role!=='owner'||!syncAllowed())return;NUTZ={laedt:1};
-  var sel='user_id,updated_at,name:data->name,xp:data->xp,days:data->days,haeppchen:data->haeppchen,tasks:data->tasks,mods:data->mods,last:data->ui->last';
+  var sel='user_id,updated_at,xp:data->xp,days:data->days,haeppchen:data->haeppchen,tasks:data->tasks,mods:data->mods,last:data->ui->last';
   Promise.all([sbAuthed('/rest/v1/progress?select='+sel),sbAuthed('/rest/v1/profiles?select=user_id,role,created_at'),
-    sbAuthed('/rest/v1/rpc/nutzung_konten',{method:'POST',body:'{}'}).catch(function(){return null})]) /* E-Mail/letzte Anmeldung: nur, wenn die SQL-Funktion eingespielt ist */
-  .then(function(r){NUTZ={rows:r[0]||[],profs:r[1]||[],konten:r[2]||[],ohneKonten:r[2]==null,t:Date.now()}},function(e){NUTZ={err:String(e&&e.message||e)}})
+    ]) /* Chef #111: keine E-Mail/Anmeldedaten – nur Lernstand-Zahlen und Rolle */
+  .then(function(r){NUTZ={rows:r[0]||[],profs:r[1]||[],konten:[],t:Date.now()}},function(e){NUTZ={err:String(e&&e.message||e)}})
   .then(function(){if(/^#\/nutzung/.test(location.hash)&&layer.hidden)rerender()})}
 function nzZeit(ts){if(!ts)return '–';var d=new Date(ts),tage=Math.round((new Date(TODAY).getTime()-new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime())/864e5);
   return tage<=0?'heute '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'):tage===1?'gestern':'vor '+tage+' Tagen'}
@@ -1270,7 +1270,7 @@ function vNutzung(){var h='<div class="m-studium"><div class="band"><div class="
   if(NUTZ.err)return h+'<section class="sec"><div class="card empty">'+t('nutz.fehler',{m:esc(NUTZ.err)})+'<div class="btns" style="justify-content:center"><button class="btn sm" data-nz="neu">'+t('nutz.neu')+'</button></div></div></section></div></div>';
   var A=nutzAuswerten(NUTZ.rows,NUTZ.profs,NUTZ.konten,TODAY),s=A.sum,kach=function(n,l){return '<div class="nz-k"><b>'+n+'</b><span>'+l+'</span></div>'};
   h+='<section class="sec"><h2>'+t('nutz.summen')+' <button class="btn sm ghost" data-nz="neu" style="margin-left:auto">'+t('nutz.neu')+'</button></h2><div class="nz-sum">'+kach(s.konten,'Konten')+kach(s.tester,'Tester')+kach(s.heute,'aktiv heute')+kach(s.d7,'aktiv 7 Tage')+kach(s.d30,'aktiv 30 Tage')+kach(s.lerntage,'Lerntage gesamt')+kach(s.richtig,'Aufgaben gelöst')+kach(s.hp,'Häppchen erledigt')+'</div>'+
-    '<p class="small muted" style="margin-top:10px">'+t('nutz.stand',{z:nzZeit(NUTZ.t)})+(NUTZ.ohneKonten?' · '+t('nutz.ohnekonten'):'')+'</p></section>';
+    '<p class="small muted" style="margin-top:10px">'+t('nutz.stand',{z:nzZeit(NUTZ.t)})+'</p></section>';
   h+='<section class="sec"><h2>'+t('nutz.nutzer')+' <span class="chip acc">'+A.nutzer.length+'</span></h2>'+(A.nutzer.length?'<div class="list nz-list">'+A.nutzer.map(function(n){
       return '<button class="item nz-row" data-nz="d:'+esc(n.id)+'"><span class="grow"><span class="t">'+esc(n.kenn)+(n.rolle?' <span class="chip">'+esc(n.rolle)+'</span>':'')+'</span><span class="s">'+nzZeit(n.zuletzt)+' · Level '+n.lvl+' · '+n.xp+' XP</span>'+
         '<span class="s">Aufgaben '+n.richtig+'/'+n.gesamt+' richtig · Häppchen '+n.hp+' · Lerntage '+n.lerntage+'</span></span>'+nzBalken(n.t14)+'</button>'}).join('')+'</div>':'<div class="card empty">'+t('nutz.leer')+'</div>')+
@@ -1289,9 +1289,8 @@ document.addEventListener('click',function(e){var b=e.target.closest&&e.target.c
   if(k==='neu'){nutzLaden();rerender();return}
   if(k==='csv'){nzCsv();return}
   if(k.indexOf('d:')===0&&NUTZ&&NUTZ.rows){var A=nutzAuswerten(NUTZ.rows,NUTZ.profs,NUTZ.konten,TODAY),n=A.nutzer.find(function(x){return x.id===k.slice(2)});if(!n)return;
-    sheet('<h2>'+esc(n.kenn)+'</h2><div class="card"><div class="korow"><div class="kolbl">'+t('ko.mail')+'</div><b class="nosnap">'+esc(n.mail||'–')+'</b></div>'+
-      '<div class="korow"><div class="kolbl">Kennung</div><code class="nosnap">'+esc(n.id)+'</code></div><div class="korow"><div class="kolbl">Rolle</div>'+esc(n.rolle||'–')+'</div>'+
-      '<div class="korow"><div class="kolbl">Zuletzt aktiv</div>'+nzZeit(n.zuletzt)+'</div><div class="korow"><div class="kolbl">Letzte Anmeldung</div>'+(n.anm?nzZeit(Date.parse(n.anm)):'–')+'</div>'+
+    sheet('<h2>'+esc(n.kenn)+'</h2><div class="card"><div class="korow"><div class="kolbl">Kennung</div><code class="nosnap">'+esc(n.id)+'</code></div><div class="korow"><div class="kolbl">Rolle</div>'+esc(n.rolle||'–')+'</div>'+
+      '<div class="korow"><div class="kolbl">Zuletzt aktiv</div>'+nzZeit(n.zuletzt)+'</div>'+
       '<div class="korow"><div class="kolbl">Fächer</div>'+(n.mods.length?n.mods.map(function(m){return esc(SHORT[m]||m)}).join(', '):'–')+'</div>'+
       '<div class="korow"><div class="kolbl">Lerntage (14 Tage)</div>'+nzBalken(n.t14)+'</div></div>',{title:t('nutz.title')})}});
 function koSec(k,body){return '<section class="sec"><h2>'+t(k)+'</h2><div class="card kocard">'+body+'</div></section>'}
