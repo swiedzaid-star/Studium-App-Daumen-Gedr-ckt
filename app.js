@@ -31,7 +31,7 @@ function pwOk(p){p=String(p||'');return p.length>=PW_MIN&&/[a-zäöüß]/.test(p
    an:true, live:false = Ankündigung auf der alten Adresse („zieht um“, vorher synchronisieren, noch kein Link);
    an:true, live:true  = „ist umgezogen“ mit Link auf der alten Adresse, auf skuro.app ein Satz auf der Anmeldeseite.
    Test-Schalter: window.__umzug = 'bald' | 'alt' | 'neu'. */
-var UMZUG={an:true,live:false,datum:'Sonntag, 16.11.',kurz:'16.11.', /* Chef #96: Ankündigung ab Sa 14.11. (Paket 1), Umschalt-Tag So 16.11. 14 Uhr; danach live:true */ neu:'https://skuro.app/',neuHost:/^(www\.)?skuro\.app$/},UMZ={ok:0},UMZ_SP='studium-umz-spaeter',UMZ_OK='studium-umz-ok'; /* Schlüssel am Dateianfang: die erste Seite braucht sie (#91) */
+var UMZUG={an:true,live:true, /* Umschalt-Tag So 16.11.: skuro.app ist live */ datum:'Sonntag, 16.11.',kurz:'16.11.', /* Chef #96: Ankündigung ab Sa 14.11. (Paket 1), Umschalt-Tag So 16.11. 14 Uhr; danach live:true */ neu:'https://skuro.app/',neuHost:/^(www\.)?skuro\.app$/},UMZ={ok:0},UMZ_SP='studium-umz-spaeter',UMZ_OK='studium-umz-ok'; /* Schlüssel am Dateianfang: die erste Seite braucht sie (#91) */
 var ANF=null, /* E3 Fassung 3; Chef #80: kein Vorname in der App, der Text nennt „das Skuro-Team“ (i18n warte.*) */ SYNC_MAX=1.5*1024*1024, /* Befund 88: in BYTES, mit Abstand zur Datenbank-Grenze 2 MB (jsonb::text setzt Leerzeichen, Umlaute = 2 Bytes) */REGISTRIERUNG_AN=false,LGMODE='login',LGMAIL='',ZUG=null;
 var KEY='studium-v1', S;
 var DEVID=(function(){try{var d=localStorage.getItem('device');if(!d){d=Math.random().toString(36).slice(2,10);localStorage.setItem('device',d)}return d}catch(e){return 'x'}})(),DEVNAME=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)?'Handy':'Laptop';
@@ -235,6 +235,7 @@ function ck(id,label){var on=!!S.done[id];return '<button class="ck'+(on?' on':'
 /* ---------- MathJax ---------- */
 function wideMath(el){try{(el||document).querySelectorAll('mjx-container:not([display="true"])').forEach(function(m){var p=m.parentElement;if(!p)return;var w=m.getBoundingClientRect().width,c=p.clientWidth-(m.closest('.anim-f')?20:0);if(w<=c+1)return;
   if(m.closest('.anim-f')&&c/w>=.66){m.style.fontSize=(Math.floor(c/w*100)/100)+'em';return} /* Animation: Ergebnis soll ganz sichtbar sein, lieber etwas kleiner */
+  if(m.closest('.anim-tx,.fsteps,.fmist')&&c/w>=.7){m.style.fontSize=(Math.floor(c/w*100)/100)+'em';return} /* Befund 110: Formel im Schritt-Text (z. B. „… = 5,40 kN“) ganz zeigen statt seitlich abschneiden */
   m.classList.add('mjwide')})}catch(e){}}
 /* Formel im Quiz/Fenster (.fxbig): zu breit → verkleinern bis 55 %, damit sie ganz sichtbar ist; erst darunter seitlich wischen */
 function fitFx(el){try{(el||document).querySelectorAll('.fxbig').forEach(function(b){var m=b.querySelector('mjx-container');if(!m)return;m.style.fontSize='';var c=b.clientWidth-24,w=m.scrollWidth||m.getBoundingClientRect().width;if(w>c+1)m.style.fontSize=Math.max(.55,Math.floor(c/w*100)/100)+'em'})}catch(e){}}
@@ -431,7 +432,7 @@ function vHeute(){
   h+=umzugCard('heute');h+=installCard();h+=warteCard();h+=testerCard();h+=mvHintCard();
   /* #83 „Luft“ (Inhaber 13.11.): die Hinweise „neue Symbole“ und „verpasste Fristen“ entfallen auf Heute –
      verpasste Fristen zeigt der rote Zähler am Reiter Fristen, neue Symbole stehen unter Fächer → Symbole. */
-  var stkH=lern().stil==='stueck';h+='<section class="sec"><h2>'+(stkH?t('heute.stueck'):hs.length===1?t('heute.haeppchen1'):t('heute.haeppchen',{n:hs.length}))+' <span class="chip '+(doneN===hs.length&&hs.length?'ok':'acc')+'">'+doneN+'/'+hs.length+'</span></h2>'+(S.goal?'<p class="small muted hziel">'+t(stkH?'heute.ziel.stueck':'heute.ziel',{min:S.goal})+(hs.reduce(function(a,x){return a+(x.min||0)},0)>S.goal*1.25?' · '+t('heute.ziel.viel'):'')+'</p>':''); /* Befund 84: ehrlich sagen, wenn heute mehr ansteht als das Ziel */
+  var stkH=lern().stil==='stueck';h+='<section class="sec"><h2>'+(stkH?t('heute.stueck'):hs.length===1?t('heute.haeppchen1'):t('heute.haeppchen',{n:hs.length}))+' <span class="chip '+(doneN===hs.length&&hs.length?'ok':'acc')+'">'+doneN+'/'+hs.length+'</span></h2>'+(S.goal?'<p class="small muted hziel">'+t(stkH?(hs.some(function(x){return x.teil})?'heute.ziel.stueck.teile':'heute.ziel.stueck'):'heute.ziel',{min:S.goal})+ /* #105: „am Stück, in 2 Teilen“, wenn das Thema geteilt ist */(hs.reduce(function(a,x){return a+(x.min||0)},0)>S.goal*1.25?' · '+t('heute.ziel.viel'):'')+'</p>':''); /* Befund 84: ehrlich sagen, wenn heute mehr ansteht als das Ziel */
   if(!hs.length)h+='<div class="card empty">Heute nichts Offenes. Gönn dir eine Pause.</div>';
   h+='<div class="stack">';
   hs.forEach(function(x,i){var dn=hDone(x.key);
@@ -654,18 +655,24 @@ function vLecture(m,l){
     h+='<section class="sec"><h2>Begriffe <span class="chip acc">'+l.terms.length+'</span></h2><div class="termchips">'+l.terms.slice(0,12).map(chip).join('')+'</div>'+(l.terms.length>12?'<details class="more list" style="margin-top:10px"><summary>Alle '+l.terms.length+' Begriffe</summary><div class="termchips" style="padding:0 12px 12px">'+l.terms.slice(12).map(chip).join('')+'</div></details>':'')+'</section>'}
   return h;
 }
-function fxCard(f){return '<button class="fxcard" data-act="fx" data-f="'+esc(f.id)+'"><span class="fxn">'+esc(f.name)+'</span><span class="fxt">'+mx(f.tex)+'</span></button>'}
+function fxCard(f){return '<button class="fxcard" data-act="fx" data-f="'+esc(f.id)+'" data-q="'+esc(fxSuchtext(f))+'"><span class="fxn">'+esc(f.name)+'</span><span class="fxt">'+mx(f.tex)+'</span></button>'}
+/* #105 (Tester-Meldung 06.11.): Die Formel ist ein Bild (MathJax) – gesucht wird deshalb in Name, Bedeutung, Thema,
+   Bausteinen (Name, Zeichen, Erklärung, Einheit) und im Formeltext ohne TeX-Befehle. Klein, ohne Akzente. */
+function suchNorm(s){s=String(s||'').replace(/<[^>]*>/g,' ').toLowerCase();try{s=s.normalize('NFD').replace(/[̀-ͯ]/g,'')}catch(e){}return s.replace(/ß/g,'ss').replace(/\s+/g,' ').trim()}
+function fxSuchtext(f){var tp=TOPIC[f.topic],teile=[f.name,f.what,tp&&tp.name,f.unit,String(f.tex||'').replace(/\\[a-zA-Z]+/g,' ').replace(/[{}_^\\]/g,'')];
+  (f.parts||[]).forEach(function(p){teile.push(p.name,p.d,p.unit,String(p.sym||'').replace(/\\[a-zA-Z]+/g,' ').replace(/[{}_^\\]/g,''))});return suchNorm(teile.filter(Boolean).join(' '))}
 
 /* ---------- Formeln ---------- */
 function vFormeln(m){
-  var fb=(S.ui.fqBest||{})[m.id];var h='<section class="sec"><div class="hcard '+cls(m.id)+'"><div class="hn">?</div><div class="grow"><div class="t">Formel-Quiz</div><div class="s">Symbol, Bedeutung, Einheit, Wirkung · 15 Fragen'+(fb!=null?' · Bestwert '+fb+' %':'')+'</div></div><button class="btn sm" data-act="fquiz" data-m="'+m.id+'">Start</button></div>'+(['mech','bsk','mathe','stat'].indexOf(m.id)>=0?'<button class="btn soft block" style="margin-top:8px" data-act="unitsheet">Einheiten umrechnen üben</button>':'')+(m.id==='mathe'?'<button class="btn soft block" style="margin-top:8px" data-act="dyn">Dynexite-Eingabe üben (Testat-Format)</button>':'')+'</section><section class="sec"><input class="search" id="fsearch" type="search" placeholder="Formel suchen, z. B. pq" aria-label="Formel suchen"><p class="muted small">Tipp auf eine Formel: Du siehst jedes Zeichen einzeln erklärt.</p></section>',seen={};
+  var fb=(S.ui.fqBest||{})[m.id];var h='<section class="sec"><div class="hcard '+cls(m.id)+'"><div class="hn">?</div><div class="grow"><div class="t">Formel-Quiz</div><div class="s">Symbol, Bedeutung, Einheit, Wirkung · 15 Fragen'+(fb!=null?' · Bestwert '+fb+' %':'')+'</div></div><button class="btn sm" data-act="fquiz" data-m="'+m.id+'">Start</button></div>'+(['mech','bsk','mathe','stat'].indexOf(m.id)>=0?'<button class="btn soft block" style="margin-top:8px" data-act="unitsheet">Einheiten umrechnen üben</button>':'')+(m.id==='mathe'?'<button class="btn soft block" style="margin-top:8px" data-act="dyn">Dynexite-Eingabe üben (Testat-Format)</button>':'')+'</section><section class="sec"><input class="search" id="fsearch" type="search" placeholder="Formel suchen, z. B. pq" aria-label="Formel suchen"><p class="fnone" id="fnone" role="status" aria-live="polite" hidden></p><p class="muted small">Tipp auf eine Formel: Du siehst jedes Zeichen einzeln erklärt.</p></section>',seen={};
   var groups=[];m.lectures.forEach(function(l){var fs=m.formulas.filter(function(f){return f.lecture===l.id});if(fs.length)groups.push([l.title,fs]);fs.forEach(function(f){seen[f.id]=1})});
   var rest=m.formulas.filter(function(f){return !seen[f.id]});if(rest.length)groups.push(['Weitere',rest]);
   groups.forEach(function(g,i){h+='<section class="sec fgroup"><details class="more list"'+(i===0?' open':'')+'><summary>'+esc(g[0])+' ('+g[1].length+')</summary><div class="flist" style="padding:0 12px 12px">'+g[1].map(fxCard).join('')+'</div></details></section>'});
   return h;
 }
-document.addEventListener('input',function(e){if(e.target.id!=='fsearch')return;var q=e.target.value.trim().toLowerCase();
-  $$('.fgroup',main).forEach(function(g){var any=false;$$('.fxcard',g).forEach(function(c){var hit=!q||c.textContent.toLowerCase().indexOf(q)>=0;c.hidden=!hit;if(hit)any=true});g.hidden=!any;if(q)g.querySelector('details').open=true})});
+document.addEventListener('input',function(e){if(e.target.id!=='fsearch')return;var roh=e.target.value.trim(),w=suchNorm(roh).split(' ').filter(Boolean),n=0;
+  $$('.fgroup',main).forEach(function(g){var any=false;$$('.fxcard',g).forEach(function(c){var q=c.getAttribute('data-q')||suchNorm(c.textContent),hit=w.every(function(x){return q.indexOf(x)>=0});c.hidden=!hit;if(hit){any=true;n++}});g.hidden=!any;if(w.length&&any)g.querySelector('details').open=true});
+  var no=$('#fnone');if(no){no.hidden=!(w.length&&!n);if(!no.hidden)no.innerHTML=t('fx.keine',{q:esc(roh)})}}); /* #105: bei 0 Treffern eine klare Zeile */
 /* ---------- Formel-Fenster (SCHEMA NACHTRAG 6) ----------
    player:true → Schritt-Player aus den Feldern (Wozu → je Baustein → Rechnung → Fehler → Ergebnis), mit „Als Text“.
    sonst → kompakte Textkarte. Fehlende Felder werden weggelassen, alte Daten bleiben gültig. */
@@ -1195,7 +1202,7 @@ function spAct(a,el){
 
 /* ================= Konto-Seite #/konto (Bauprogramm B3, Plan Nr. 9; ohne Sprachwahl nach Entscheidung 7) =================
    Profil · Lernen · Darstellung · Daten · Rolle · Rechtliches · Support · Abmelden · Konto löschen (kommt mit D2). */
-var SUPPORT_MAIL='Swied.Zaid@gmail.com'; /* Support-Adresse: EINE Stelle für Konto-Seite, Anmeldeseite, Impressum, Datenschutz (vorläufig, Entscheidung Inhaber 02.11.; build.py prüft gegen docs/rechtstexte.md). Leer = Platzhalter sichtbar */
+var SUPPORT_MAIL='support@skuro.app'; /* Support-Adresse: EINE Stelle für Konto-Seite, Anmeldeseite, Impressum, Datenschutz, Nutzungsbedingungen (Chef #101: Weiterleitung aktiv seit 14.11.; build.py prüft gegen docs/rechtstexte.md). Leer = Platzhalter sichtbar */
 function supportMail(){return SUPPORT_MAIL?'<a href="mailto:'+esc(SUPPORT_MAIL)+'">'+esc(SUPPORT_MAIL)+'</a>':'<span class="ph">'+t('ko.support.fehlt')+'</span>'}
 function koSeg(act,cur,opts){return '<div class="tabs koseg" role="group">'+opts.map(function(o){var on=String(cur)===String(o[0]);return '<button class="'+(on?'on':'')+'" data-act="'+act+'" data-v="'+o[0]+'" aria-pressed="'+on+'">'+o[1]+'</button>'}).join('')+'</div>'}
 function koSec(k,body){return '<section class="sec"><h2>'+t(k)+'</h2><div class="card kocard">'+body+'</div></section>'}
@@ -1206,7 +1213,7 @@ function vKonto(){var u=AUTH.user||{},L=lern(),ch=chosen()||[],th=S.theme||'auto
   h+=koSec('ko.profil',koRow(t('ko.name'),'<div class="btns" style="margin:0"><input class="search nosnap" id="konm" value="'+esc(S.name||'')+'" placeholder="'+esc(t('ko.name.ph'))+'" autocomplete="given-name" maxlength="30"><button class="btn sm" data-act="konm">'+t('ob.speichern')+'</button></div>')+
     koRow(t('ko.mail'),'<b class="nosnap">'+esc(u.email||'–')+'</b>')+koRow(t('ko.pw'),'<button class="btn sm ghost" data-act="pwchange">'+t('ko.pw.btn')+'</button>'));
   h+=koSec('ko.lernen',koRow(t('ko.faecher'),'<div>'+(pk?'<div class="small muted">'+esc((pk.kurz||{}).de||pk.name.de||'')+'</div>':'')+obChips(ch)+'<div class="btns"><a class="btn sm soft" href="#/start/edit">'+t('ko.faecher.btn')+'</a></div></div>')+
-    koRow(t('ko.ziel'),koSeg('kogoal',S.goal||10,OBGOALS.map(function(g){return [g[0],g[0]+' min']})),HCOUNT[S.goal||10]===1?t('ob.goal.hp1'):t('ob.goal.hp',{n:HCOUNT[S.goal||10]}))+
+    koRow(t('ko.ziel'),koSeg('kogoal',S.goal||10,OBGOALS.map(function(g){return [g[0],g[0]+' min']})),L.stil==='stueck'?t('ko.ziel.stueck',{min:S.goal||10}):HCOUNT[S.goal||10]===1?t('ob.goal.hp1'):t('ob.goal.hp',{n:HCOUNT[S.goal||10]}))+ /* #105: bei „am Stück“ steuert das Tagesziel nur die Teilung */
     koRow(t('ko.zeit'),koSeg('kozeit',L.zeit||'',OBZEIT.map(function(z){return [z,t('ob.zeit.'+z)]})),L.zeit?t('ob.zeit.'+L.zeit+'.satz'):t('ko.zeit.leer'))+
     koRow(t('ko.stil'),koSeg('kostil',L.stil,OBSTIL.map(function(z){return [z,t('ob.sum.'+z)]})),t('ob.stil.'+L.stil+'.satz'))+
     koRow(t('ko.erinn'),'<span class="chip">'+t('ko.bald')+'</span>',(L.zeit?t('ko.erinn.sub',{uhr:esc(L.uhr||((D.sprueche||{}).erinnerung||{})[L.zeit]||'–')}):t('ko.erinn.leer'))));
@@ -1826,7 +1833,7 @@ document.addEventListener('click',function(e){
   if(a==='kr'){kopfrechnen();return}
   if(a==='eye'){var pi=$('#lpw');if(pi){pi.type=pi.type==='password'?'text':'password';t.classList.toggle('on',pi.type==='text')}return}
   if(a==='login'){var em=($('#lmail').value||'').trim(),pw=$('#lpw').value||'';if(!em||!pw){var le=$('#lerr');if(le)le.textContent='E-Mail und Passwort eingeben.';return}t.disabled=true;t.classList.add('busy');login(em,pw).then(function(){toast('Willkommen!');rerender();syncNow(false)}).catch(function(e){t.disabled=false;t.classList.remove('busy');var el=$('#lerr');if(el)el.textContent=/invalid/i.test(e.message)?'E-Mail oder Passwort stimmt nicht.':'Anmeldung fehlgeschlagen: '+e.message});return}
-  if(a==='forgot'){var em2=($('#lmail').value||'').trim();if(!em2){toast('Erst die E-Mail eintragen.');return}try{localStorage.setItem('studium-recover',em2)}catch(e){}recover(em2).then(function(){toast('Falls ein Konto existiert, kommt gleich eine E-Mail.')}).catch(function(e){toast('Fehler: '+e.message)});return}
+  if(a==='forgot'){var em2=($('#lmail').value||'').trim();if(!em2){toast('Erst die E-Mail eintragen.');return}try{localStorage.setItem('studium-recover',em2)}catch(e){}recover(em2).then(function(){toast('Falls ein Konto existiert, kommt gleich eine E-Mail.')}).catch(function(e){toast(mailFehler(e))});return}
   if(a==='regrecht'){e.preventDefault();var rk=t.getAttribute('data-k');sheet('<div class="card recht">'+String((D.recht||{})[rk]||'').replace(/\{SUPPORT\}/g,supportMail())+'</div>',{title:t0('recht.'+rk)});return} /* Befund 90: Formular bleibt, Eingaben bleiben */
   if(a==='regform'){LGMODE='reg';rerender();setTimeout(function(){var i=$('#rmail');if(i)i.focus()},50);return}
   if(a==='regback'){LGMODE='login';rerender();return}
@@ -1856,7 +1863,8 @@ document.addEventListener('click',function(e){
   if(a==='umzspaeter'){umzLs(UMZ_SP,Date.now());rerender();return}
   if(a==='umzsync'){if(!navigator.onLine){toast(t0('umz.offline'));return}var z0=Date.now();
     syncNow(false).then(function(){if(!SY.err&&SY.last&&SY.last>=z0-1000){UMZ.ok=Date.now();umzLs(UMZ_OK,UMZ.ok)}else toast(SY.err?'Problem: '+SY.err:t0('umz.fehl'));rerender()});return}
-  if(a==='syncnow'){syncNow(false).then(function(){toast(SY.err?'Problem: '+SY.err:'Synchronisiert.')});return}
+  if(a==='syncnow'){if(!navigator.onLine){toast(t0('sync.offline'));return} /* Befund 104: offline nicht „Synchronisiert.“ melden */
+    var z1=Date.now();syncNow(false).then(function(){toast(SY.err?'Problem: '+SY.err:SY.last&&SY.last>=z1-1000?'Synchronisiert.':t0('sync.spaeter'))});return}
   if(a==='logout'){logout();toast('Abgemeldet.');rerender();return}
   if(a==='nach'){runNach(t.getAttribute('data-l'));return}
   if(a==='nachredo'){var its=window.__nachWrong||[];if(its.length)runItems(its,{title:'Lücken nochmal',mode:'practice'});return}
@@ -2008,7 +2016,7 @@ function warteCard(){if(!SY.wartet||!loggedIn())return '';return '<div class="ca
 function testerCard(){if(SY.role!=='tester'||S.ui.testerOk)return '';
   return '<div class="card tester" style="margin-top:12px"><b>Du bist Tester</b><p class="small" style="margin:6px 0">Du nutzt eine frühe Version der App. Wenn dir ein Fehler auffällt, du eine Idee hast oder dir etwas nicht gefällt: tippe unten rechts auf <b>Melden</b>. Die Meldung geht mit einem Bild der Seite direkt an den Entwickler.</p><p class="small muted" style="margin:0 0 8px">Dein Lernstand wird nur für dein Konto gespeichert und zwischen deinen Geräten abgeglichen.</p><button class="btn sm" data-act="testerok">Verstanden</button></div>'}
 function syLater(){if(!syncAllowed())return;clearTimeout(syTimer);syTimer=setTimeout(function(){syncNow(true)},4000)}
-function syStatus(){if(!loggedIn())return 'Nicht angemeldet';if(SY.err)return '<span class="badc">Problem: '+esc(SY.err)+'</span>';if(!SY.last)return 'Angemeldet, noch nicht synchronisiert';var d=new Date(SY.last);return '<span class="okc">Synchron</span> · zuletzt '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' Uhr'}
+function syStatus(){if(!loggedIn())return 'Nicht angemeldet';if(!navigator.onLine)return '<span class="badc">'+t('sync.offline')+'</span>'; /* Befund 104 */if(SY.err)return '<span class="badc">Problem: '+esc(SY.err)+'</span>';if(!SY.last)return 'Angemeldet, noch nicht synchronisiert';var d=new Date(SY.last);return '<span class="okc">Synchron</span> · zuletzt '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+' Uhr'}
 function syncCard(){var u=AUTH.user||{};return '<div class="card"><b>Konto und Geräte-Sync</b><p class="small" style="margin:6px 0">Angemeldet als <b class="nosnap">'+esc(u.email||'')+'</b></p><p class="small" id="systat" style="margin:6px 0">'+syStatus()+'</p><p class="small muted">Fortschritt, Pläne und Einstellungen gleichen sich automatisch ab: beim Öffnen, alle 2 Minuten und kurz nach jeder Änderung. Ohne Internet läuft alles weiter und wird später nachgetragen.</p><div class="btns"><button class="btn sm" data-act="syncnow">Jetzt synchronisieren</button><button class="btn sm ghost" data-act="pwchange">Passwort ändern</button><button class="btn sm ghost" data-act="logout">Abmelden</button></div></div>'}
 /* ===== Registrierung (E3 Fassung 2, Inhaber 04.11.: gebaut, aber AUS) =====
    REGISTRIERUNG_AN schaltet den Knopf „Konto erstellen“ frei (Tests: window.__registrierungAn). Wer sich registrieren darf,
@@ -2026,6 +2034,9 @@ function lgReg(){if(LGMODE==='regok')return '<h2>'+t('reg.ok.title')+'</h2><p>'+
     '<button class="btn lg-go" data-act="regsend">'+t('reg.senden')+' '+IC.chev+'</button><button class="lg-link" data-act="regback">'+t('reg.schon')+'</button>'}
 document.addEventListener('input',function(e){if(e.target&&e.target.id==='rmail')LGMAIL=e.target.value}); /* Befund 90: E-Mail bleibt beim Zurückkommen */
 function signup(email,pw){return sbFetch('/auth/v1/signup?redirect_to='+encodeURIComponent(appUrl()),{method:'POST',body:JSON.stringify({email:email,password:pw})},true)}
+/* Befund 102: Fehler beim Mail-Versand (Passwort vergessen) verständlich statt „Fehler: email rate limit exceeded“ */
+function mailFehler(e){var m=String(e&&e.message||e),st=e&&e.status;if(st===429||/rate.?limit|too many|over_email_send/i.test(m))return t0('mail.err.limit');
+  if(!navigator.onLine||/Failed to fetch|NetworkError/i.test(m))return t0('sync.offline');return t0('mail.err.allg')}
 function regFehler(e){var m=String(e&&e.message||e),st=e&&e.status;
   if(/signup.?disabled|Signups not allowed/i.test(m))return t('reg.err.zu');
   if(/already|registered|exists/i.test(m))return t('reg.err.vergeben');
@@ -2057,6 +2068,7 @@ function vLogin(){var rec=AUTH.recovery,c=(D._counts||{}),nT=0,nF=0;var sm=D.mod
 document.addEventListener('keyup',function(e){var c=document.getElementById('lcaps');if(c&&e.getModifierState&&document.activeElement&&document.activeElement.id==='lpw')c.classList.toggle('on',e.getModifierState('CapsLock'))});
 setTimeout(idleF,1200);
 setTimeout(function(){syncNow(true)},1500);setInterval(function(){if(!document.hidden)syncNow(true)},120000);
-document.addEventListener('visibilitychange',function(){syncNow(true)});window.addEventListener('online',function(){syncNow(true)});
+document.addEventListener('visibilitychange',function(){syncNow(true)});window.addEventListener('online',function(){systatNeu();syncNow(true).then(systatNeu)});window.addEventListener('offline',systatNeu);
+function systatNeu(){var e=document.getElementById('systat');if(e)e.innerHTML=syStatus()} /* Befund 104: Sync-Zeile im Konto folgt dem Netz */
 window.__dbg={S:function(){return S},isGroupEv:isGroupEv,mergeByTs:mergeByTs,spItems:spItems,termQuestions:termQuestions,TERM:function(){return TERM},MOD:MOD,formulaItems:formulaItems,runItems:runItems,dynItems:dynItems,dynEval:dynEval,symGaps:symGaps,symKeys:symKeys,D:D,weeklyOn:weeklyOn,pd:pd};
 })();

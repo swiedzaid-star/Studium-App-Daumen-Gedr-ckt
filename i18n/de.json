@@ -346,7 +346,14 @@
  "land.sub": "Vorlesungen als Lerntexte, eigene Aufgaben mit Lösungsweg, Fristen und Lernpläne – auf jedem Gerät derselbe Stand.",
  "umz.zeile": "Lernstand gesichert · Umzug {d}",
  "umz.spaeter": "Später",
+ "sync.offline": "Offline – wird synchronisiert, sobald du wieder Internet hast.",
+ "sync.spaeter": "Gerade läuft schon ein Abgleich – gleich noch einmal.",
+ "mail.err.limit": "Gerade zu viele Mails verschickt. Bitte in ein paar Minuten nochmal.",
+ "mail.err.allg": "Die Mail konnte gerade nicht verschickt werden. Bitte gleich noch einmal oder über „Melden“ Bescheid geben.",
  "ko.pw.akt": "Aktuelles Passwort",
  "ko.pw.f.aktfehlt": "Bitte zuerst dein aktuelles Passwort eingeben.",
- "ko.pw.f.aktfalsch": "Aktuelles Passwort stimmt nicht."
+ "ko.pw.f.aktfalsch": "Aktuelles Passwort stimmt nicht.",
+ "fx.keine": "Keine Formel zu „{q}“ gefunden – probier ein anderes Wort oder schau im <a href=\"#/symbole\">Symbol-Lexikon</a>.",
+ "ko.ziel.stueck": "Am Stück: ein Thema pro Tag. Ist es länger als {min} min, teilt Skuro es in 2 Teile.",
+ "heute.ziel.stueck.teile": "Tagesziel {min} min · am Stück, in 2 Teilen"
 }
